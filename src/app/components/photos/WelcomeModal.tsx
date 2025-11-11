@@ -1,3 +1,6 @@
+/* eslint-disable react/no-unescaped-entities */
+
+
 "use client"
 
 import { X, Info, Users, MapPin, FileText, Sparkles, ChevronRight, Heart } from "lucide-react"
