@@ -1,0 +1,662 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { User, Mail, Lock, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
+
+import { apiService } from "@/services/api";
+
+// =============================================
+// TIPOS
+// =============================================
+interface FormData {
+  name: string;
+  email: string;
+  role: string;
+  fechaNacimiento?: string;
+  password: string;
+  confirmPassword: string;
+  idMedico?: string; //Para el registro de pacientes
+}
+
+interface FormErrors {
+  name?: string;
+  email?: string;
+  role?: string;
+  fechaNacimiento?: string;
+  password?: string;
+  confirmPassword?: string;
+  general?: string;
+}
+
+interface InputProps {
+  label: string;
+  type: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
+  placeholder: string;
+  disabled: boolean;
+}
+
+interface ButtonProps {
+  type?: "button" | "submit" | "reset";
+  variant?: "primary" | "outline";
+  onClick?: () => void;
+  disabled: boolean;
+  className?: string;
+  children: React.ReactNode;
+}
+
+// =============================================
+// COMPONENTES AUXILIARES
+// =============================================
+
+const Input = ({ 
+  label, 
+  type, 
+  icon: Icon, 
+  value, 
+  onChange, 
+  error, 
+  placeholder, 
+  disabled 
+}: InputProps) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const inputType = type === "password" && showPassword ? "text" : type;
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-slate-700">{label}</label>
+      <div className="relative">
+        {Icon && (
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <Icon className="w-5 h-5" />
+          </div>
+        )}
+        <input
+          type={inputType}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={`w-full ${Icon ? 'pl-10' : 'pl-4'} ${type === 'password' ? 'pr-12' : 'pr-4'} py-2.5 text-gray-900 font-medium placeholder:text-slate-400 border ${
+            error ? 'border-red-500' : 'border-slate-300'
+          } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
+        />
+        
+        {/* Botón toggle para contraseña */}
+        {type === "password" && (
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-purple-600 transition-colors focus:outline-none"
+            disabled={disabled}
+          >
+            {showPassword ? (
+              <EyeOff className="w-5 h-5" />
+            ) : (
+              <Eye className="w-5 h-5" />
+            )}
+          </button>
+        )}
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </div>
+  );
+};
+
+const Button = ({ 
+  type = "button", 
+  variant = "primary", 
+  onClick, 
+  disabled, 
+  className = "", 
+  children 
+}: ButtonProps) => {
+  const baseStyles = "px-6 py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center";
+  const variants = {
+    primary: "bg-purple-600 hover:bg-purple-700 text-white",
+    outline: "bg-white border-2 border-slate-300 hover:border-slate-400 text-slate-700"
+  };
+  
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseStyles} ${variants[variant]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+const cn = (...classes: (string | boolean | undefined)[]) => 
+  classes.filter(Boolean).join(' ');
+
+// =============================================
+// COMPONENTE PRINCIPAL
+// =============================================
+export default function Register() {
+  const params = useSearchParams();
+  const token = params.get("token");
+  const router = useRouter();
+
+  const [estado, setEstado] = useState<"verificando" | "ok" | "invalido">("verificando");
+  const [invitacionData, setInvitacionData] = useState<{
+    email: string;
+    rol: string;
+    nombreCompleto: string;
+    idMedico?: string;
+  } | null>(null);
+  
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 3;
+  
+  const [formData, setFormData] = useState<FormData>({
+    name: "",
+    email: "",
+    role: "",
+    password: "",
+    confirmPassword: "",
+    idMedico: undefined,
+  });
+  
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  // =============================================
+  // EFECTO: VERIFICAR TOKEN AL CARGAR
+  // =============================================
+  useEffect(() => {
+    if (!token) {
+      setEstado("invalido");
+      return;
+    }
+
+    const verificar = async () => {
+      try {
+        console.log('🔍 Verificando token...');
+        
+        const data = await apiService.verificarInvitacion(token);
+        
+        console.log("✅ Invitación válida:", data);
+        console.log("ID Médico asociado (si aplica):", data.idMedico);
+        
+        setInvitacionData(data);
+        
+        setFormData(prev => ({ 
+          ...prev, 
+          name: data.nombreCompleto || "",
+          email: data.email || "",
+          role: data.rol || "",
+          idMedico: data.idMedico || undefined
+        }));
+
+        console.log("formData con el idMedico", data.idMedico);
+        
+        setEstado("ok");
+        
+      } catch (error: any) {
+        console.error('❌ Error al verificar token:', error);
+        setEstado("invalido");
+      }
+    };
+
+    verificar();
+  }, [token]);
+
+  // =============================================
+  // FUNCIONES DE VALIDACIÓN
+  // =============================================
+  const getStepTitle = () => {
+    switch (currentStep) {
+      case 1: return "Información personal";
+      case 2: return "Selección de rol";
+      case 3: return "Seguridad";
+      default: return "";
+    }
+  };
+
+  const validateStep = () => {
+    const newErrors: FormErrors = {};
+    
+    if (currentStep === 1) {
+      if (!formData.name.trim()) {
+        newErrors.name = "El nombre es requerido";
+      }
+      if (!formData.email.trim()) {
+        newErrors.email = "El correo es requerido";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = "Correo electrónico inválido";
+      }
+
+      if(!formData.fechaNacimiento){
+        newErrors.fechaNacimiento = "La fecha de nacimiento es requerida";
+
+      } else {
+        const fechaNac = new Date(formData.fechaNacimiento);
+        const hoy = new Date();
+        //validar que no sea fecha futura
+        if(fechaNac > hoy){
+          newErrors.fechaNacimiento = "La fecha de nacimiento no puede ser futura";
+        } else{
+          let edad = hoy.getFullYear() - fechaNac.getFullYear();
+          const mesActual = hoy.getMonth();
+          const mesNacimiento = fechaNac.getMonth();
+          //ajustar edad si no ha cumplido años este año
+          if (mesActual < mesNacimiento || (mesActual === mesNacimiento && hoy.getDate() < fechaNac.getDate())) {
+            edad--;
+          }
+          //Valirdar que sea mayor de 18 años
+          if(edad < 18){
+            newErrors.fechaNacimiento = "Debes ser mayor de 18 años";
+        }
+      }
+    }
+  }
+    
+    if (currentStep === 2) {
+      if (!formData.role) {
+        newErrors.general = "Debes seleccionar un rol";
+      }
+    }
+    
+    if (currentStep === 3) {
+      if (!formData.password) {
+        newErrors.password = "La contraseña es requerida";
+      } else if (formData.password.length < 10) {
+        newErrors.password = "Mínimo 10 caracteres";
+      } else if (!/[A-Z]/.test(formData.password)) {
+        newErrors.password = "Debe incluir una mayúscula";
+      } else if (!/[!@#$%^&*]/.test(formData.password)) {
+        newErrors.password = "Debe incluir un símbolo";
+      }
+      
+      if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = "Las contraseñas no coinciden";
+      }
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // =============================================
+  // HANDLERS
+  // =============================================
+  const handleNext = () => {
+    if (validateStep()) {
+      setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+    }
+  };
+
+  const handleBack = () => {
+    setCurrentStep(prev => Math.max(prev - 1, 1));
+    setErrors({});
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+    
+    setIsLoading(true);
+    setErrors({});
+    
+    try {
+      console.log('📝 Enviando registro...');
+      console.log("Id médico en formData",formData.idMedico);
+
+      const registroPayload: any={
+        nombre: formData.name,
+        correo: formData.email,
+        fechaNacimiento: formData.fechaNacimiento,
+        contrasenia: formData.password,
+        rol: formData.role,
+      }
+
+      //Solamente incluir IdMedico si el rol es paciente
+      if(formData.role === 'paciente' && formData.idMedico){
+        registroPayload.idMedico = formData.idMedico;
+        console.log("Incluyendo idMedico en el payload:", formData.idMedico);
+      }
+      console.log("Payload de registro final:", registroPayload);
+      
+      await apiService.completarRegistroConInvitacion(registroPayload);
+
+      console.log('✅ Registro completado exitosamente');
+      
+      setSuccess(true);
+      
+      setTimeout(() => {
+        router.push("/authentication/login");
+      }, 2000);
+      
+    } catch (error: any) {
+      console.error('❌ Error al completar registro:', error);
+      setErrors({ general: error.message || "Error al crear la cuenta" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // =============================================
+  // RENDERIZADO: VERIFICANDO
+  // =============================================
+  if (estado === "verificando") {
+    return (
+      <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
+        <div 
+          className="hidden lg:block relative bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: "url('/images/medicaIndividual.jpg')" }}
+        />
+        
+        <div className="flex items-center justify-center p-8 bg-gradient-to-br from-pink-100 to-indigo-800">
+          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-800 text-lg font-medium">Verificando invitación...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // RENDERIZADO: INVITACIÓN INVÁLIDA
+  // =============================================
+  if (estado === "invalido") {
+    return (
+      <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
+        <div 
+          className="hidden lg:block relative bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: "url('/images/medicaIndividual.jpg')" }}
+        />
+        
+        <div className="flex items-center justify-center p-8 bg-gradient-to-br from-pink-100 to-indigo-800">
+          <div className="w-full max-w-md bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
+              <AlertCircle className="w-8 h-8 text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Invitación Inválida</h2>
+            <p className="text-slate-600 mb-6">
+              El enlace de invitación no es válido o ha expirado.
+            </p>
+            <Button 
+              onClick={() => router.push("/")} 
+              disabled={false} 
+              className="w-full"
+            >
+              Volver al inicio
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================
+  // RENDERIZADO: FORMULARIO DE REGISTRO
+  // =============================================
+  return (
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
+      {/* Sección de imagen - lado izquierdo */}
+      <div 
+        className="hidden lg:block relative bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/images/medicaIndividual.jpg')" }}
+      />
+      
+      {/* Sección de formulario - lado derecho */}
+      <div className="flex items-center justify-center p-8 bg-gradient-to-br from-pink-100 to-indigo-800">
+        <div className="w-full max-w-md bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8">
+          
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
+              <User className="w-8 h-8 text-purple-600" />
+            </div>
+            <h2 className="text-3xl font-bold text-slate-800 mb-2">
+              Completa tu Registro
+            </h2>
+            <p className="text-slate-600">Paso {currentStep} de {totalSteps}</p>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mb-8">
+            <div className="flex gap-2">
+              {[1, 2, 3].map((step) => (
+                <div
+                  key={step}
+                  className={cn(
+                    "h-2 flex-1 rounded-full transition-all",
+                    step <= currentStep ? "bg-purple-600" : "bg-slate-300"
+                  )}
+                />
+              ))}
+            </div>
+            <p className="text-center text-sm text-slate-600 mt-2 font-medium">
+              {getStepTitle()}
+            </p>
+          </div>
+
+          {/* Success Message */}
+          {success && (
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-green-800 font-medium">¡Cuenta creada exitosamente!</p>
+                <p className="text-green-700 text-sm mt-1">Redirigiendo al login...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {errors.general && !success && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-red-800 text-sm">{errors.general}</p>
+            </div>
+          )}
+
+          {/* Form Steps */}
+          <div className="space-y-5">
+            
+            {/* Step 1: Personal Info */}
+            {currentStep === 1 && (
+              <div className="space-y-5 animate-in fade-in duration-300">
+                <Input
+                  label="Nombre completo"
+                  type="text"
+                  icon={User}
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    if (errors.name) {
+                      const newErrors = { ...errors };
+                      delete newErrors.name;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  error={errors.name}
+                  placeholder="Juan Pérez"
+                  disabled={isLoading || success}
+                />
+
+                <Input
+                  label="Correo electrónico"
+                  type="email"
+                  icon={Mail}
+                  value={formData.email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    if (errors.email) {
+                      const newErrors = { ...errors };
+                      delete newErrors.email;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  error={errors.email}
+                  placeholder="tu@correo.com"
+                  disabled={true}
+                />
+
+                <Input
+                  label="Fecha de Nacimiento"
+                  type="date"
+                  value={formData.fechaNacimiento || ""}
+                  onChange={(e) => {
+                    setFormData({ ...formData, fechaNacimiento: e.target.value });
+                    if (errors.fechaNacimiento) {
+                      const newErrors = { ...errors };
+                      delete newErrors.fechaNacimiento;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  error={errors.fechaNacimiento}
+                  placeholder="Selecciona tu fecha de nacimiento"
+                  disabled={isLoading || success}
+                />
+              </div>
+            )}
+
+            {/* Step 2: Role Selection */}
+{currentStep === 2 && (
+  <div className="space-y-5 animate-in fade-in duration-300">
+    <div className="space-y-3">
+      <label className="block text-sm font-medium text-slate-700">
+        Tu rol en la plataforma
+      </label>
+      
+      {/* Mostrar el rol de forma informativa (no editable) */}
+      <div className="p-4 border-2 border-purple-600 bg-purple-50 rounded-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
+            <User className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <div className="font-semibold text-slate-800 capitalize">
+              {formData.role === 'medico' ? 'Médico' : 
+               formData.role === 'cuidador' ? 'Cuidador' : 'Paciente'}
+            </div>
+            <div className="text-sm text-slate-600">
+              {formData.role === 'medico' ? 'Acompaña el proceso' : 
+               formData.role === 'cuidador' ? 'Sube los recuerdos' : 
+               'Recibo la terapia'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+        <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-blue-800">
+          El rol fue asignado por el sistema y no puede ser modificado.
+        </p>
+      </div>
+    </div>
+  </div>
+)}
+
+            {/* Step 3: Password */}
+            {currentStep === 3 && (
+              <div className="space-y-5 animate-in fade-in duration-300">
+                <Input
+                  label="Contraseña"
+                  type="password"
+                  icon={Lock}
+                  value={formData.password}
+                  onChange={(e) => {
+                    setFormData({ ...formData, password: e.target.value });
+                    if (errors.password) {
+                      const newErrors = { ...errors };
+                      delete newErrors.password;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  error={errors.password}
+                  placeholder="••••••••"
+                  disabled={isLoading || success}
+                />
+
+                <Input
+                  label="Confirmar contraseña"
+                  type="password"
+                  icon={Lock}
+                  value={formData.confirmPassword}
+                  onChange={(e) => {
+                    setFormData({ ...formData, confirmPassword: e.target.value });
+                    if (errors.confirmPassword) {
+                      const newErrors = { ...errors };
+                      delete newErrors.confirmPassword;
+                      setErrors(newErrors);
+                    }
+                  }}
+                  error={errors.confirmPassword}
+                  placeholder="••••••••"
+                  disabled={isLoading || success}
+                />
+
+                <div className="bg-slate-50 p-3 rounded-lg text-xs text-slate-600">
+                  <p className="font-medium mb-1">La contraseña debe tener:</p>
+                  <ul className="space-y-1 pl-4">
+                    <li className="list-disc">Mínimo 10 caracteres</li>
+                    <li className="list-disc">Una letra mayúscula</li>
+                    <li className="list-disc">Un símbolo (!@#$%^&*)</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Navigation Buttons */}
+          <div className="flex gap-3 mt-8">
+            {currentStep > 1 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBack}
+                disabled={isLoading || success}
+                className="flex-1"
+              >
+                Atrás
+              </Button>
+            )}
+            
+            {currentStep < totalSteps ? (
+              <Button
+                type="button"
+                onClick={handleNext}
+                disabled={isLoading || success}
+                className="flex-1"
+              >
+                Continuar
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading || success}
+                className="flex-1"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                    Creando cuenta...
+                  </>
+                ) : success ? (
+                  <>
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    ¡Cuenta creada!
+                  </>
+                ) : (
+                  "Completar Registro"
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
