@@ -5,7 +5,7 @@
 
 import { authService } from './auth.service'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://34.117.162.170'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.devcorebits.com'
 
 export interface CreateUserDto {
   nombre: string
