@@ -37,7 +37,7 @@ interface Caregiver {
 export default function DoctorPage() {
     const [patients, setPatients] = useState<Patient[]>([])
     const [allCaregivers, setAllCaregivers] = useState<Caregiver[]>([])
-    // ✅ CORRECCIÓN CLAVE: isLoading inicializado en TRUE para bloquear render inicial
+    // ✅ CLAVE: isLoading inicializado en TRUE para bloquear render inicial
     const [isLoading, setIsLoading] = useState<boolean>(true) 
     const [doctorName, setDoctorName] = useState<string>("")
     const [doctorId, setDoctorId] = useState<string>("")
@@ -50,11 +50,9 @@ export default function DoctorPage() {
     const router = useRouter()
 
     
-    // --- FUNCIÓN loadData CORREGIDA ---
+    // --- FUNCIÓN loadData ---
     const loadData = async (idMedico: string) => {
-        // No se cambia setIsLoading aquí, ya lo maneja initializeData
         try {
-            // ✅ CORRECCIÓN: Usar sessionStorage para obtener el token
             const token = sessionStorage.getItem("authToken") 
             if (!token) throw new Error("No se encontró token de autenticación")
 
@@ -71,7 +69,6 @@ export default function DoctorPage() {
             )
 
             if (!patientsResponse.ok) {
-                // Si la respuesta es 401 aquí, es otra señal de token expirado
                  if (patientsResponse.status === 401) {
                     throw new Error("Token expirado o no autorizado (loadData)")
                 }
@@ -97,7 +94,6 @@ export default function DoctorPage() {
             )
 
             if (!allUsersResponse.ok) {
-                // Si la respuesta es 401 aquí, es otra señal de token expirado
                 if (allUsersResponse.status === 401) {
                     throw new Error("Token expirado o no autorizado (loadData)")
                 }
@@ -119,36 +115,30 @@ export default function DoctorPage() {
             }
             console.error("❌ Error en loadData:", error)
         } 
-        // NOTE: No usamos finally aquí porque lo usamos en el useEffect principal
     }
 
 
-    // --- useEffect CORREGIDO ---
+    // --- useEffect: Verificación de Sesión ---
     useEffect(() => {
         const initializeData = async () => {
             console.log("🔍 Inicializando datos y verificando sesión...")
 
-            // ✅ CORRECCIÓN: Usar sessionStorage para obtener token/ID
-            const token = sessionStorage.getItem("authToken") // <-- USAMOS sessionStorage
-            const idMedico = sessionStorage.getItem("userId")     // <-- USAMOS sessionStorage
+            const token = sessionStorage.getItem("authToken")
+            const idMedico = sessionStorage.getItem("userId")     
 
-            // --- BLOQUEO DE ACCESO INMEDIATO EN EL NAVEGADOR ---
+            // --- BLOQUEO INMEDIATO (Si no hay token/ID en sessionStorage) ---
             if (!token || !idMedico) {
                 console.warn("⚠️ No hay token o ID de usuario. Redirigiendo inmediatamente.")
                 
-                // Aseguramos la limpieza total
                 localStorage.clear()
                 sessionStorage.clear()
                 
-                // Redirigimos y terminamos la ejecución
                 router.replace("/authentication/login") 
-                // Establecemos isLoading a false para que la condición de render no se quede colgada
                 setIsLoading(false) 
                 return 
             }
-            // --- FIN BLOQUEO DE ACCESO INMEDIATO ---
+            // --- FIN BLOQUEO INMEDIATO ---
             
-            // Si llegamos aquí, tenemos token y ID, procedemos
             setDoctorId(idMedico)
 
             if (!API_URL) {
@@ -171,7 +161,7 @@ export default function DoctorPage() {
                 )
 
                 if (response.status === 401) {
-                    console.warn("❌ Token expirado o no autorizado (Verificación Backend)")
+                    console.error("❌ Token expirado o no autorizado (Verificación Backend). Status: 401. Redirigiendo.")
                     localStorage.clear()
                     sessionStorage.clear()
                     router.replace("/authentication/login")
@@ -179,9 +169,15 @@ export default function DoctorPage() {
                 }
 
                 if (!response.ok) {
-                    // Loguea el status code exacto para un mejor diagnóstico.
-                    console.error(`❌ Error al obtener el usuario. Status: ${response.status}. Mensaje: ${await response.text()}`)
-                    throw new Error("Error en la respuesta del servidor.")
+                    const errorText = await response.text()
+                    console.error(`❌ Error al obtener el usuario. Status: ${response.status}. Mensaje del servidor: ${errorText}`)
+                    
+                    // Si falla por cualquier otra razón (500, 404), redirigimos también
+                    localStorage.clear()
+                    sessionStorage.clear()
+                    router.replace("/authentication/login") 
+                    
+                    throw new Error("Error en la respuesta del servidor (Status no OK).")
                 }
 
                 const dataUsuario = await response.json()
@@ -216,20 +212,19 @@ export default function DoctorPage() {
             }
         }
 
-        // ✅ CORRECCIÓN: Ejecución inmediata sin setTimeout
         initializeData()
     }, [router])
 
 
-    // --- Lógica de Logout CORREGIDA ---
+    // --- Lógica de Logout ---
     const handleLogout = async () => {
         setIsLoggingOut(true)
         try {
-            // ✅ CORRECCIÓN: Limpiar ambos por seguridad, pero sessionStorage es el clave
+            // Limpiar ambos por seguridad
             localStorage.clear()
             sessionStorage.clear()
             
-            // Limpieza de cookies (opcional, si hay tokens en cookies)
+            // Limpieza de cookies (opcional)
             document.cookie.split(";").forEach((cookie) => {
                 const eqPos = cookie.indexOf("=")
                 const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
@@ -246,7 +241,6 @@ export default function DoctorPage() {
 
     const handleViewProfile = () => router.push("/users/profile")
     
-    // ... (otras funciones handleInviteSuccess y handleAssignSuccess se mantienen igual)
     const handleInviteSuccess = () => {
         console.log("✅ Usuario invitado exitosamente")
         setRefreshKey((prev) => prev + 1)
