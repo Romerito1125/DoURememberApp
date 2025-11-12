@@ -2,9 +2,9 @@
  * Constantes y configuración de la aplicación
  */
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://api.devcorebits.com/api'
 
-export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://api.devcorebits.com'
 
 export const API_ENDPOINTS = {
   // Usuarios y Autenticación

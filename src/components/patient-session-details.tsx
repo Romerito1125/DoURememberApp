@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { X, CheckCircle, AlertCircle } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'http://api.devcorebits.com/api'
 
 interface SessionDetailsProps {
   patientId: string

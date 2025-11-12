@@ -26,7 +26,7 @@ import { authService } from "@/services/auth.service"
 import UserAvatar from "@/components/UserAvatar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface Stats {
   totalImagenes: number

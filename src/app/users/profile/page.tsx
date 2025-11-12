@@ -8,7 +8,7 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import Footer from "@/app/components/footer"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface UserProfile {
   idUsuario: string

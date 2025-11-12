@@ -7,7 +7,7 @@ import Header from "@/app/components/header"
 import Footer from "@/app/components/footer"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://34.117.162.170/api'
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface Photo {
   idImagen: number

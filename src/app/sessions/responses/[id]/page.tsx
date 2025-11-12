@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://34.117.162.170'
+const API_URL = 'https://api.devcorebits.com'
 
 interface Imagen {
   id: number

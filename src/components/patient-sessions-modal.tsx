@@ -77,7 +77,7 @@ export function PatientSessionsModal({ isOpen, onClose, patientId, patientName }
 
       // Usar el endpoint listarSesionesGt con paginación alta para obtener todas
       const response = await fetch(
-        `http://localhost:3000/api/descripciones-imagenes/listarSesionesGt?idPaciente=${patientId}&estado_sesion=completado&page=1&limit=100`,
+        `http://api.devcorebits.com/api/descripciones-imagenes/listarSesionesGt?idPaciente=${patientId}&estado_sesion=completado&page=1&limit=100`,
         {
           headers: {
             'Authorization': `Bearer ${token}`

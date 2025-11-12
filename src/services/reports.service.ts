@@ -89,9 +89,9 @@ export interface SessionDetails {
 }
 
 class ReportsService {
-  private baseURL = 'http://34.117.162.170/api/descripciones-imagenes'
-  private reportesURL = 'http://34.117.162.170/api/alertas-reportes'
-  private authURL = 'http://34.117.162.170/api/usuarios-autenticacion'
+  private baseURL = 'https://api.devcorebits.com/api/descripciones-imagenes'
+  private reportesURL = 'https://api.devcorebits.com/api/alertas-reportes'
+  private authURL = 'https://api.devcorebits.com/api/usuarios-autenticacion'
 
   /**
    * Obtiene la lista de todos los pacientes

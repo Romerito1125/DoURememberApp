@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
 import { authService } from "@/services/auth.service"
 
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'http://api.devcorebits.com/api'
 
 interface UserAvatarProps {
   userName: string

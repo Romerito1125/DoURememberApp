@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button"
 import { DashboardHeader } from "@/components/dashboard-header"
 import UserAvatar from "@/components/UserAvatar"
 
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface Session {
   idSesion: number
