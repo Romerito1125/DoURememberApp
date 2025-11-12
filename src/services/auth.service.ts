@@ -86,8 +86,7 @@ class AuthService {
       console.log('User ID:', userId)
       console.log('Access Token obtenido')
 
-      // PASO 2: Obtener datos del perfil desde el backend
-      console.log('🔍 Buscando perfil del usuario...')
+      console.log('Buscando perfil del usuario...')
       
       const userResponse = await fetch(
       `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${userId}`,
@@ -105,24 +104,6 @@ class AuthService {
 
       console.log('User response status:', userResponse.status)
 
-      if (!userResponse.ok) {
-        const errorText = await userResponse.text()
-        console.error('Error al obtener usuario:', errorText)
-        
-        // Si no se encuentra el perfil, crear sesión básica
-        const basicSession: UserSession = {
-          userId,
-          email,
-          rol: 'paciente',
-          nombre: email.split('@')[0],
-          accessToken
-        }
-        
-        this.currentSession = basicSession
-        console.log('⚠️ Usando sesión básica sin perfil del backend')
-        return basicSession
-      }
-
       const userData = await userResponse.json()
       console.log('👤 User data completo:', userData)
       
@@ -135,12 +116,11 @@ class AuthService {
       console.log('🔑 ROL del usuario:', usuario.rol)
       console.log('👤 Nombre del usuario:', usuario.nombre)
 
-      // PASO 3: Crear sesión con los datos del backend
       const session: UserSession = {
         userId,
         email: usuario.correo || email,
-        rol: usuario.rol || 'paciente',
-        nombre: usuario.nombre || 'Usuario',
+        rol: usuario.rol,
+        nombre: usuario.nombre,
         edad: usuario.edad,
         accessToken
       }

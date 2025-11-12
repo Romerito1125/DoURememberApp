@@ -9,7 +9,7 @@ import { PatientDetailModal } from "@/components/patient-detail-modal"
 import { createClient } from "@/utils/supabase/client"
 import { PatientCaregiversModal } from "./patient-caregivers-modal"
 
-const API_URL = 'http://api.devcorebits.com/api'
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface PatientListProps {
     searchQuery?: string

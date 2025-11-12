@@ -9,7 +9,7 @@ import { PatientCaregiversModal } from "./patient-caregivers-modal"
 import { assignmentService, Usuario } from "@/services/assignment.service"
 import { authService } from "@/services/auth.service"
 
-const API_URL = 'http://api.devcorebits.com/api'
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface Patient extends Usuario {
   idPaciente?: string
