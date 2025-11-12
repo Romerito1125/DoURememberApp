@@ -6,9 +6,11 @@ import Header from "@/app/components/header"
 import Footer from "@/app/components/footer"
 import DeletePhotoModal from "@/app/components/photos/DeletePhotoModal"
 import { Plus, Trash2, Image as ImageIcon, CheckCircle, X, Loader2, Calendar } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
+// Eliminamos la importación de Supabase ya que usaremos localStorage
+// import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'https://api.devcorebits.com'
+// Nota: He cambiado la URL de la API a la base para que funcione con tu endpoint de eliminar.
+const API_URL = 'https://api.devcorebits.com/api'
 
 interface Photo {
   idImagen: number
@@ -36,6 +38,63 @@ export default function PhotosListPage() {
   })
   const [showDeleteSuccess, setShowDeleteSuccess] = useState(false)
 
+  // Función principal de carga de fotos
+  const loadPhotos = async () => {
+    setIsLoading(true)
+    let token = ""
+    let userId = ""
+    
+    try {
+      // 1. OBTENER TOKEN Y USER ID DESDE LOCALSTORAGE (NUEVA LÓGICA)
+      token = localStorage.getItem("authToken") || ""
+      userId = localStorage.getItem("userId") || ""
+      
+      if (!token || !userId) {
+        alert('Debes iniciar sesión')
+        router.push('/authentication/login')
+        return
+      }
+
+      // 2. LLAMAR A LA API USANDO EL TOKEN OBTENIDO
+      const response = await fetch(
+        `${API_URL}/descripciones-imagenes/listarImagenes/${userId}?page=1&limit=100`,
+        {
+          headers: {
+            // ✅ CRUCIAL: Añadir el token de autorización
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      )
+
+      if (!response.ok) {
+        // Si el backend devuelve un 401 (Unauthorized), forzamos login
+        if (response.status === 401 || response.status === 403) {
+           throw new Error('Sesión expirada o no válida. Redirigiendo a login.')
+        }
+        throw new Error('Error al cargar imágenes')
+      }
+      
+      const data = await response.json()
+      
+      // La respuesta esperada es { data: [...] }
+      setPhotos(data.data || [])
+      
+    } catch (error) {
+      console.error('Error al cargar fotos:', error)
+      alert('Error al cargar las imágenes. Vuelva a iniciar sesión si el problema persiste.')
+      
+      // Si el error indica un problema de autenticación, limpiamos y redirigimos
+      if (typeof error === 'object' && error !== null && 'message' in error && (error.message as string).includes('Sesión expirada')) {
+        localStorage.clear()
+        sessionStorage.clear()
+        router.push('/authentication/login')
+      }
+      
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadPhotos()
   }, [])
@@ -51,37 +110,6 @@ export default function PhotosListPage() {
       document.body.style.overflow = 'unset'
     }
   }, [selectedPhoto])
-
-  const loadPhotos = async () => {
-    setIsLoading(true)
-    try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        alert('Debes iniciar sesión')
-        router.push('/authentication/login')
-        return
-      }
-
-      const response = await fetch(
-        `${API_URL}/api/descripciones-imagenes/listarImagenes/${user.id}?page=1&limit=100`
-      )
-
-      if (!response.ok) throw new Error('Error al cargar imágenes')
-      
-      const data = await response.json()
-      
-      // ✅ CORRECCIÓN: Según tu endpoint, la respuesta es { data: [...], meta: {...} }
-      setPhotos(data.data || [])
-      
-    } catch (error) {
-      console.error('Error al cargar fotos:', error)
-      alert('Error al cargar las imágenes')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const handlePhotoClick = (photo: Photo) => {
     setSelectedPhoto(photo)
@@ -101,9 +129,21 @@ export default function PhotosListPage() {
   }
 
   const handleDeleteConfirm = async (photoId: string) => {
+    const token = localStorage.getItem("authToken")
+    
+    if (!token) {
+        alert('Sesión no válida o expirada. Por favor, vuelve a iniciar sesión.')
+        router.push('/authentication/login')
+        return
+    }
+
     try {
+      // ✅ CRUCIAL: Añadir el token de autorización a la solicitud DELETE
       const response = await fetch(`${API_URL}/descripciones-imagenes/eliminar/${photoId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       })
 
       if (!response.ok) throw new Error('Error al eliminar imagen')
@@ -335,7 +375,8 @@ export default function PhotosListPage() {
 
       <DeletePhotoModal
         isOpen={deleteModal.isOpen}
-        photoId={deleteModal.photoId.toString()}
+        // Usamos toString() para asegurarnos de que el ID sea un string para el modal
+        photoId={deleteModal.photoId.toString()} 
         photoName={deleteModal.photoName}
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
