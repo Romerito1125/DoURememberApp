@@ -2,25 +2,17 @@
 
 import { useState, useEffect } from "react"
 import { X, Mail, Calendar, Heart, AlertCircle, Loader2, UserPlus, Search, CheckCircle, Cake, Trash2 } from "lucide-react"
-import { assignmentService } from "@/services/assignment.service"
+import { assignmentService, Usuario } from "@/services/assignment.service"
 import { authService } from "@/services/auth.service"
 import { Dialog, DialogContent, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 
-interface Patient {
+interface Patient extends Usuario {
   idPaciente?: string
-  idUsuario?: string
-  nombre: string
-  correo: string
-  edad?: number
-  fechaNacimiento?: string
 }
 
-interface Caregiver {
-  idUsuario?: string
-  idCuidador?: string
-  nombre: string
-  correo: string
+interface Caregiver extends Usuario {
+  // Puedes agregar campos adicionales específicos de cuidador si los necesitas
 }
 
 interface PatientCaregiversModalProps {
@@ -36,7 +28,7 @@ export function PatientCaregiversModal({
   patient,
   onUpdate 
 }: PatientCaregiversModalProps) {
-  const [assignedCaregivers, setAssignedCaregivers] = useState<Caregiver[]>([])
+  const [assignedCaregivers, setAssignedCaregivers] = useState<Usuario[]>([])
   const [availableCaregivers, setAvailableCaregivers] = useState<any[]>([])
   const [isLoadingCaregivers, setIsLoadingCaregivers] = useState(false)
   const [isLoadingAvailable, setIsLoadingAvailable] = useState(false)

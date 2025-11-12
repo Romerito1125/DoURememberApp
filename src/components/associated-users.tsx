@@ -6,18 +6,14 @@ import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { PatientSessionsModal } from "@/components/patient-sessions-modal"
 import { PatientCaregiversModal } from "./patient-caregivers-modal"
-import { assignmentService } from "@/services/assignment.service"
+import { assignmentService, Usuario } from "@/services/assignment.service"
 import { authService } from "@/services/auth.service"
 
 const API_URL = 'http://localhost:3000/api'
 
-interface Patient {
-  idUsuario: string
+interface Patient extends Usuario {
   idPaciente?: string
-  nombre: string
-  correo: string
   edad: number
-  fechaNacimiento?: string
   sesionesCompletadas?: number
   cuidador?: {
     idCuidador: string
@@ -164,29 +160,30 @@ export function AssociatedUsers() {
   }
 
   const handleOpenCaregiversModal = (patient: Patient) => {
-    console.log('🔓 Abriendo modal de cuidadores con paciente:', patient)
-    
-    if (!patient.idUsuario) {
-      console.error('❌ Error: Paciente sin ID válido')
-      alert('Error: No se puede abrir el modal sin un ID de paciente válido')
-      return
-    }
-
-    const normalizedPatient: Patient = {
-      idPaciente: patient.idUsuario,
-      idUsuario: patient.idUsuario,
-      nombre: patient.nombre,
-      correo: patient.correo,
-      edad: patient.edad,
-      fechaNacimiento: patient.fechaNacimiento,
-      cuidador: patient.cuidador,
-      sesionesCompletadas: patient.sesionesCompletadas
-    }
-    
-    console.log('✅ Paciente normalizado:', normalizedPatient)
-    setSelectedPatientForCaregivers(normalizedPatient)
-    setIsCaregiversModalOpen(true)
+  console.log('🔓 Abriendo modal de cuidadores con paciente:', patient)
+  
+  if (!patient.idUsuario) {
+    console.error('❌ Error: Paciente sin ID válido')
+    alert('Error: No se puede abrir el modal sin un ID de paciente válido')
+    return
   }
+
+  const normalizedPatient: Patient = {
+    idPaciente: patient.idUsuario,
+    idUsuario: patient.idUsuario,
+    nombre: patient.nombre,
+    correo: patient.correo,
+    rol: 'paciente',  
+    edad: patient.edad,
+    fechaNacimiento: patient.fechaNacimiento,
+    cuidador: patient.cuidador,
+    sesionesCompletadas: patient.sesionesCompletadas
+  }
+  
+  console.log('Paciente normalizado:', normalizedPatient)
+  setSelectedPatientForCaregivers(normalizedPatient)
+  setIsCaregiversModalOpen(true)
+}
 
   const handleCloseCaregiversModal = () => {
     setIsCaregiversModalOpen(false)
@@ -229,7 +226,7 @@ return (
         Gestión de Pacientes Asociados
       </h3>
 
-      {/* 🔍 IMPLEMENTACIÓN DE LA LUPA/BARRA DE BÚSQUEDA */}
+      {/* IMPLEMENTACIÓN DE LA LUPA/BARRA DE BÚSQUEDA */}
       <div className="relative mb-8">
         <input
           type="text"

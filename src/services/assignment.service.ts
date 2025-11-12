@@ -1,11 +1,15 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
 
-interface Usuario {
+export interface Usuario {
   idUsuario: string
+  idCuidador?: string
+  idPaciente?: string  
   rol: string
-  // otros campos que tenga tu usuario
+  nombre: string
+  correo: string
+  edad?: number
+  fechaNacimiento?: string
 }
-
 export const assignmentService = {
   /**
    * Asignar cuidador a paciente
