@@ -11,10 +11,6 @@ interface Patient extends Usuario {
   idPaciente?: string
 }
 
-interface Caregiver extends Usuario {
-  // Puedes agregar campos adicionales específicos de cuidador si los necesitas
-}
-
 interface PatientCaregiversModalProps {
   open: boolean
   onClose: () => void
