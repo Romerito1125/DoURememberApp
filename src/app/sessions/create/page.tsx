@@ -53,6 +53,7 @@ export default function CreateSessionPage() {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session?.access_token) {
+        // ✅ Manejo del token: Redirección si no hay token.
         router.push('/authentication/login')
         return
       }
@@ -60,6 +61,7 @@ export default function CreateSessionPage() {
       setUserId(session.user.id)
       const token = session.access_token
 
+      // ✅ Uso del token en la llamada a listarImagenes
       const photosResponse = await fetch(
         `${API_URL}/descripciones-imagenes/listarImagenes/${session.user.id}?page=1&limit=100`,
         {
@@ -74,8 +76,13 @@ export default function CreateSessionPage() {
         const photosData = await photosResponse.json()
         const availablePhotos = (photosData.data || []).filter((photo: Photo) => photo.idSesion === null)
         setPhotos(availablePhotos)
+      } else if (photosResponse.status === 401) {
+         // ✅ Manejo del token: Redirección si la API lo rechaza
+        router.push('/authentication/login')
+        return
       }
 
+      // ✅ Uso del token en la llamada a pacienteCuidador
       const patientsResponse = await fetch(
         `${API_URL}/usuarios-autenticacion/pacienteCuidador/${session.user.id}`,
         { headers: { "Authorization": `Bearer ${token}` } }
@@ -86,6 +93,7 @@ export default function CreateSessionPage() {
         
         const patientsComplete = await Promise.all(
           patientsData.map(async (item: { idPaciente: string }) => {
+            // ✅ Uso del token en la llamada a buscarUsuario
             const profileResponse = await fetch(
               `${API_URL}/usuarios-autenticacion/buscarUsuario/${item.idPaciente}`,
               { headers: { "Authorization": `Bearer ${token}` } }
@@ -107,6 +115,10 @@ export default function CreateSessionPage() {
         if (validPatients.length > 0) {
           setSelectedPatient(validPatients[0].idUsuario)
         }
+      } else if (patientsResponse.status === 401) {
+         // ✅ Manejo del token: Redirección si la API lo rechaza
+        router.push('/authentication/login')
+        return
       }
 
     } catch (error: any) {
@@ -132,7 +144,7 @@ export default function CreateSessionPage() {
     })
   }
 
-  const handleCreateSession = async () => {
+  const handleCreateSession = () => {
     if (selectedImages.length !== 3) {
       setError('Debes seleccionar exactamente 3 imágenes para crear una sesión')
       return
@@ -156,9 +168,12 @@ export default function CreateSessionPage() {
       const { data: { session } } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        throw new Error('Sesión no válida')
+        // ✅ Manejo del token: Si la sesión expira justo ahora
+        router.push('/authentication/login')
+        return
       }
 
+      // ✅ Uso del token en la llamada a crearSesion
       const response = await fetch(`${API_URL}/descripciones-imagenes/crearSesion`, {
         method: 'POST',
         headers: {
@@ -172,14 +187,19 @@ export default function CreateSessionPage() {
       })
 
       if (!response.ok) {
+        if (response.status === 401) {
+            router.push('/authentication/login') // Token rechazado
+            return
+        }
         const errorData = await response.json()
         throw new Error(errorData.message || 'Error al crear sesión')
       }
 
       const sesionData = await response.json()
 
-      // Si hay preguntas personalizadas, actualizar el ground truth de cada imagen
+      // 🚨 CORRECCIÓN CLAVE: Solo actualiza el Ground Truth si las preguntas NO son las default
       if (!usarPreguntasDefault && preguntasPersonalizadas.length > 0) {
+        console.log("📝 Actualizando Ground Truth con preguntas personalizadas...")
         for (const idImagen of selectedImages) {
           try {
             // Obtener el ground truth actual
@@ -192,7 +212,7 @@ export default function CreateSessionPage() {
               const gtData = await gtResponse.json()
               
               // Actualizar con las preguntas personalizadas
-              await fetch(
+              const updateResponse = await fetch(
                 `${API_URL}/descripciones-imagenes/actualizarGroundTruth/${gtData.idGroundtruth}`,
                 {
                   method: 'PATCH',
@@ -205,6 +225,9 @@ export default function CreateSessionPage() {
                   })
                 }
               )
+              if (!updateResponse.ok) {
+                console.warn(`⚠️ Error al actualizar Ground Truth para imagen ${idImagen}. Status: ${updateResponse.status}`)
+              }
             }
           } catch (err) {
             console.error('Error al actualizar preguntas:', err)
@@ -225,6 +248,26 @@ export default function CreateSessionPage() {
       setIsCreating(false)
     }
   }
+  
+  // --- Funciones del Modal de Preguntas ---
+  const handleEditPregunta = (e: React.ChangeEvent<HTMLTextAreaElement>, idx: number) => {
+    const nuevasPreguntas = [...preguntasPersonalizadas]
+    nuevasPreguntas[idx] = e.target.value
+    setPreguntasPersonalizadas(nuevasPreguntas)
+  }
+
+  const handleAddPregunta = () => {
+    if (preguntasPersonalizadas.length < 5) { // Límite de 5 preguntas
+      setPreguntasPersonalizadas([...preguntasPersonalizadas, ''])
+    }
+  }
+
+  const handleRemovePregunta = (idx: number) => {
+    if (preguntasPersonalizadas.length > 1) {
+        setPreguntasPersonalizadas(preguntasPersonalizadas.filter((_, i) => i !== idx))
+    }
+  }
+  // --- Fin Funciones del Modal de Preguntas ---
 
   if (isLoading) {
     return (
@@ -542,29 +585,73 @@ export default function CreateSessionPage() {
                   ))}
                 </div>
               )}
-
+              
+              {/* Opción Preguntas Personalizadas */}
+              <div className={`flex items-start gap-4 p-6 border-2 rounded-2xl cursor-pointer transition-all ${
+                !usarPreguntasDefault 
+                  ? 'bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-400 shadow-md' 
+                  : 'bg-white border-slate-200 hover:border-slate-300'
+              }`}
+              onClick={() => {
+                setUsarPreguntasDefault(false)
+                if (preguntasPersonalizadas.length === 0) {
+                    setPreguntasPersonalizadas([...PREGUNTAS_GUIA_DEFAULT]) // Cargar defaults si está vacío
+                }
+              }}
+              >
+                <input
+                  type="radio"
+                  id="preguntasPersonalizadas"
+                  checked={!usarPreguntasDefault}
+                  onChange={() => setUsarPreguntasDefault(false)}
+                  className="w-5 h-5 text-purple-600 mt-1"
+                />
+                <label htmlFor="preguntasPersonalizadas" className="flex-1 cursor-pointer">
+                  <p className="font-bold text-slate-900 text-lg mb-1">Personalizar preguntas</p>
+                  <p className="text-slate-600">Configura preguntas específicas para esta sesión (máx. 5)</p>
+                </label>
+              </div>
               
 
               {!usarPreguntasDefault && (
-                <div className="ml-9 space-y-4">
+                <div className="ml-9 space-y-4 p-6 bg-slate-50 rounded-xl border border-slate-200">
                   {preguntasPersonalizadas.map((pregunta, idx) => (
-                    <div key={idx} className="flex gap-3">
-                      <span className="text-purple-600 font-bold text-lg mt-3">{idx + 1}.</span>
+                    <div key={idx} className="flex items-center gap-3">
+                      <span className="text-purple-600 font-bold text-lg">{idx + 1}.</span>
                       <textarea
                         value={pregunta}
-                        onChange={(e) => {
-                          const nuevasPreguntas = [...preguntasPersonalizadas]
-                          nuevasPreguntas[idx] = e.target.value
-                          setPreguntasPersonalizadas(nuevasPreguntas)
-                        }}
+                        onChange={(e) => handleEditPregunta(e, idx)}
                         className="flex-1 px-4 py-3 border-2 border-slate-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all text-slate-900"
                         rows={2}
                         placeholder={`Pregunta ${idx + 1}`}
                       />
+                      <button
+                        onClick={() => handleRemovePregunta(idx)}
+                        disabled={preguntasPersonalizadas.length <= 1}
+                        className={`p-2 rounded-full transition-colors ${
+                          preguntasPersonalizadas.length <= 1 
+                            ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                            : 'bg-red-100 text-red-600 hover:bg-red-200'
+                        }`}
+                        title="Eliminar pregunta"
+                      >
+                        <Plus className="w-5 h-5 transform rotate-45" />
+                      </button>
                     </div>
                   ))}
                   
-                  
+                  {preguntasPersonalizadas.length < 5 && (
+                    <button
+                        onClick={handleAddPregunta}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-xl hover:bg-purple-200 transition-colors font-semibold ml-auto"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Añadir Pregunta
+                    </button>
+                  )}
+                  {preguntasPersonalizadas.length >= 5 && (
+                    <p className="text-sm text-red-600 text-center">Máximo de 5 preguntas alcanzado.</p>
+                  )}
                 </div>
               )}
             </div>
