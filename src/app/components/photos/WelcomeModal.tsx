@@ -94,7 +94,7 @@ export default function WelcomeModal({ isOpen, onClose, onStart }: WelcomeModalP
                   Describe el lugar lo más específico posible:
                 </p>
                 <p className="text-blue-700 italic bg-white/70 p-3 rounded-lg border border-blue-200">
-                  "Esto fue en la casa de mi abuela en el barrio Granada, Cali. En el patio donde siempre jugábamos..."
+                  'Esto fue en la casa de mi abuela en el barrio Granada, Cali. En el patio donde siempre jugábamos...'
                 </p>
                 <p className="text-sm text-green-700 font-medium mt-3 flex items-center gap-2">
                   ✨ Consejo: Mientras más detalles del lugar, ¡mejor!
@@ -115,7 +115,7 @@ export default function WelcomeModal({ isOpen, onClose, onStart }: WelcomeModalP
                   Cuéntanos sobre el momento o evento:
                 </p>
                 <p className="text-green-700 italic bg-white/70 p-3 rounded-lg border border-green-200">
-                  "Era el cumpleaños número 70 de mi abuela. Celebramos con toda la familia, había música y bailamos mucho..."
+                  'Era el cumpleaños número 70 de mi abuela. Celebramos con toda la familia, había música y bailamos mucho...'
                 </p>
                 <p className="text-sm text-green-700 font-medium mt-3 flex items-center gap-2">
                   ✨ Consejo: ¿Qué se celebraba? ¿Cuándo fue aproximadamente?
@@ -136,7 +136,7 @@ export default function WelcomeModal({ isOpen, onClose, onStart }: WelcomeModalP
                   Todo lo que venga a tu mente es importante:
                 </p>
                 <p className="text-amber-700 italic bg-white/70 p-3 rounded-lg border border-amber-200">
-                  "Hacía mucho calor ese día, todos estábamos muy felices. Había torta de chocolate que es mi favorita..."
+                  'Hacía mucho calor ese día, todos estábamos muy felices. Había torta de chocolate que es mi favorita...'
                 </p>
                 <p className="text-sm text-green-700 font-medium mt-3 flex items-center gap-2">
                   ✨ Consejo: Clima, emociones, comida, olores, cualquier detalle cuenta
