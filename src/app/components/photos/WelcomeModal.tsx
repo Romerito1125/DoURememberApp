@@ -73,7 +73,7 @@ export default function WelcomeModal({ isOpen, onClose, onStart }: WelcomeModalP
                   Escribe de forma natural. Por ejemplo:
                 </p>
                 <p className="text-purple-700 italic bg-white/70 p-3 rounded-lg border border-purple-200">
-                  'Yo estaba con mi tío Carlos y mi prima Laura. Mi tío tenía como 50 años en esa época...'
+                   Yo estaba con mi tío Carlos y mi prima Laura. Mi tío tenía como 50 años en esa época...
                 </p>
                 <p className="text-sm text-green-700 font-medium mt-3 flex items-center gap-2">
                   ✨ Consejo: Menciona nombres y cómo se relacionan contigo
