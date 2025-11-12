@@ -408,7 +408,7 @@ ${new Date().toISOString()}
                                       {patientDescription ? (
                                           <p className="text-sm text-slate-800 whitespace-pre-line">
                                               {/* Accedemos directamente a patientDescription.texto */}
-                                              '{patientDescription.texto}'
+                                               {patientDescription.texto}
                                               <span className="text-xs text-slate-500 block mt-1">({formatDate(patientDescription.fecha)})</span>
                                           </p>
                                       ) : (
