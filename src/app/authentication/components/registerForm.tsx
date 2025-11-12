@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { User, Mail, Lock, CheckCircle, AlertCircle, Eye, EyeOff } from "lucide-react";
 
-import { apiService } from "@/services/api";
+// NOTA: La dependencia a apiService ha sido eliminada.
+// La lógica de fetch de las funciones necesarias se ha movido
+// a las nuevas funciones locales `verificarInvitacion` y `completarRegistro`.
+
+// =============================================
+// CONFIGURACIÓN DE API
+// =============================================
+// Usar la misma lógica de URL base que en apiService
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.devcorebits.com';
+const USER_AUTH_ENDPOINT = `${API_URL}/api/usuarios-autenticacion`;
 
 // =============================================
 // TIPOS
@@ -16,7 +25,7 @@ interface FormData {
   fechaNacimiento?: string;
   password: string;
   confirmPassword: string;
-  idMedico?: string; //Para el registro de pacientes
+  idMedico: string | null; // Se actualiza para permitir 'null'
 }
 
 interface FormErrors {
@@ -50,18 +59,127 @@ interface ButtonProps {
 }
 
 // =============================================
+// FUNCIONES DE API MOVIDAS/ADAPTADAS
+// =============================================
+
+/**
+ * Función local para verificar el token de invitación (adaptada de apiService.verificarInvitacion)
+ */
+async function verificarInvitacion(token: string) {
+  try {
+    console.log('🔍 Verificando token de invitación...');
+
+    const response = await fetch(
+      `${USER_AUTH_ENDPOINT}/verificarToken?token=${token}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Token inválido o expirado');
+    }
+
+    const data = await response.json();
+    console.log('✅ Token válido:', data);
+
+    // FIX 1: Usar 'null' en lugar de 'undefined' cuando no hay idMedico
+    const idMedicoValue = data.invitacion.idMedico || null;
+    console.log("Id médico asociado (null o string):", idMedicoValue);
+
+    // El backend devuelve: { ok, message, invitacion: { id, correo, nombreCompleto, rol, idMedico } }
+    return {
+      email: data.invitacion.correo,
+      rol: data.invitacion.rol,
+      nombreCompleto: data.invitacion.nombreCompleto,
+      idMedico: idMedicoValue
+    };
+
+  } catch (error: any) {
+    console.error('❌ Error en verificarInvitacion:', error);
+    throw new Error(error.message || 'Error al verificar invitación');
+  }
+}
+
+/**
+ * Función local para completar el registro (adaptada de apiService.completarRegistroConInvitacion)
+ */
+async function completarRegistro(data: {
+  nombre: string;
+  correo: string;
+  contrasenia: string;
+  rol: string;
+  fechaNacimiento?: string;
+  idMedico: string | null; // Se espera que sea un string o null
+}): Promise<any> {
+  try {
+    console.log('📝 Completando registro con invitación...')
+
+    // FIX 2: Simplificar la construcción del payload para incluir idMedico directamente,
+    // que será 'null' o un 'string' según la invitación.
+    const payload: any = {
+      nombre: data.nombre,
+      correo: data.correo,
+      contrasenia: data.contrasenia,
+      rol: data.rol,
+      status: 'activo',
+      // Incluir idMedico. Será null para médicos/cuidadores y el ID para pacientes.
+      idMedico: data.idMedico
+    }
+    
+    // Incluir fechaNacimiento solo si existe, aunque la validación del frontend lo hace obligatorio.
+    if (data.fechaNacimiento) {
+      payload.fechaNacimiento = data.fechaNacimiento;
+    }
+
+    console.log('Payload final para el registro:', payload);
+
+    const response = await fetch(
+      `${USER_AUTH_ENDPOINT}/crearUsuario`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Error al completar el registro');
+    }
+
+    const result = await response.json();
+    console.log('✅ Registro completado:', result);
+    return result;
+
+  } catch (error: any) {
+    console.error('❌ Error en completarRegistroConInvitacion:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(errorMessage || 'Error al completar el registro');
+  }
+}
+
+// =============================================
 // COMPONENTES AUXILIARES
 // =============================================
 
-const Input = ({ 
-  label, 
-  type, 
-  icon: Icon, 
-  value, 
-  onChange, 
-  error, 
-  placeholder, 
-  disabled 
+const Input = ({
+  label,
+  type,
+  icon: Icon,
+  value,
+  onChange,
+  error,
+  placeholder,
+  disabled
 }: InputProps) => {
   const [showPassword, setShowPassword] = useState(false);
   const inputType = type === "password" && showPassword ? "text" : type;
@@ -81,11 +199,10 @@ const Input = ({
           onChange={onChange}
           placeholder={placeholder}
           disabled={disabled}
-          className={`w-full ${Icon ? 'pl-10' : 'pl-4'} ${type === 'password' ? 'pr-12' : 'pr-4'} py-2.5 text-gray-900 font-medium placeholder:text-slate-400 border ${
-            error ? 'border-red-500' : 'border-slate-300'
-          } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
+          className={`w-full ${Icon ? 'pl-10' : 'pl-4'} ${type === 'password' ? 'pr-12' : 'pr-4'} py-2.5 text-gray-900 font-medium placeholder:text-slate-400 border ${error ? 'border-red-500' : 'border-slate-300'
+            } rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
         />
-        
+
         {/* Botón toggle para contraseña */}
         {type === "password" && (
           <button
@@ -107,20 +224,20 @@ const Input = ({
   );
 };
 
-const Button = ({ 
-  type = "button", 
-  variant = "primary", 
-  onClick, 
-  disabled, 
-  className = "", 
-  children 
+const Button = ({
+  type = "button",
+  variant = "primary",
+  onClick,
+  disabled,
+  className = "",
+  children
 }: ButtonProps) => {
   const baseStyles = "px-6 py-3 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center";
   const variants = {
     primary: "bg-purple-600 hover:bg-purple-700 text-white",
     outline: "bg-white border-2 border-slate-300 hover:border-slate-400 text-slate-700"
   };
-  
+
   return (
     <button
       type={type}
@@ -133,7 +250,7 @@ const Button = ({
   );
 };
 
-const cn = (...classes: (string | boolean | undefined)[]) => 
+const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
 
 // =============================================
@@ -149,21 +266,21 @@ export default function Register() {
     email: string;
     rol: string;
     nombreCompleto: string;
-    idMedico?: string;
+    idMedico: string | null; // Se actualiza para ser string o null
   } | null>(null);
-  
+
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 3;
-  
+
   const [formData, setFormData] = useState<FormData>({
     name: "",
     email: "",
     role: "",
     password: "",
     confirmPassword: "",
-    idMedico: undefined,
+    idMedico: null, // Inicializar como null
   });
-  
+
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -177,36 +294,37 @@ export default function Register() {
       return;
     }
 
-    const verificar = async () => {
+    const checkToken = async () => {
       try {
         console.log('🔍 Verificando token...');
-        
-        const data = await apiService.verificarInvitacion(token);
-        
+
+        // **USO DE LA FUNCIÓN LOCAL VERIFICARINVITACION**
+        const data = await verificarInvitacion(token);
+
         console.log("✅ Invitación válida:", data);
-        console.log("ID Médico asociado (si aplica):", data.idMedico);
-        
+        console.log("ID Médico asociado (string o null):", data.idMedico);
+
         setInvitacionData(data);
-        
-        setFormData(prev => ({ 
-          ...prev, 
+
+        setFormData(prev => ({
+          ...prev,
           name: data.nombreCompleto || "",
           email: data.email || "",
           role: data.rol || "",
-          idMedico: data.idMedico || undefined
+          idMedico: data.idMedico, // Ahora será string o null
         }));
 
         console.log("formData con el idMedico", data.idMedico);
-        
+
         setEstado("ok");
-        
+
       } catch (error: any) {
         console.error('❌ Error al verificar token:', error);
         setEstado("invalido");
       }
     };
 
-    verificar();
+    checkToken();
   }, [token]);
 
   // =============================================
@@ -223,7 +341,7 @@ export default function Register() {
 
   const validateStep = () => {
     const newErrors: FormErrors = {};
-    
+
     if (currentStep === 1) {
       if (!formData.name.trim()) {
         newErrors.name = "El nombre es requerido";
@@ -234,16 +352,16 @@ export default function Register() {
         newErrors.email = "Correo electrónico inválido";
       }
 
-      if(!formData.fechaNacimiento){
+      if (!formData.fechaNacimiento) {
         newErrors.fechaNacimiento = "La fecha de nacimiento es requerida";
 
       } else {
         const fechaNac = new Date(formData.fechaNacimiento);
         const hoy = new Date();
         //validar que no sea fecha futura
-        if(fechaNac > hoy){
+        if (fechaNac > hoy) {
           newErrors.fechaNacimiento = "La fecha de nacimiento no puede ser futura";
-        } else{
+        } else {
           let edad = hoy.getFullYear() - fechaNac.getFullYear();
           const mesActual = hoy.getMonth();
           const mesNacimiento = fechaNac.getMonth();
@@ -252,19 +370,20 @@ export default function Register() {
             edad--;
           }
           //Valirdar que sea mayor de 18 años
-          if(edad < 18){
+          if (edad < 18) {
             newErrors.fechaNacimiento = "Debes ser mayor de 18 años";
+          }
         }
       }
     }
-  }
-    
+
     if (currentStep === 2) {
+      // El rol ya está precargado y deshabilitado, pero mantenemos la validación por si acaso.
       if (!formData.role) {
         newErrors.general = "Debes seleccionar un rol";
       }
     }
-    
+
     if (currentStep === 3) {
       if (!formData.password) {
         newErrors.password = "La contraseña es requerida";
@@ -275,12 +394,12 @@ export default function Register() {
       } else if (!/[!@#$%^&*]/.test(formData.password)) {
         newErrors.password = "Debe incluir un símbolo";
       }
-      
+
       if (formData.password !== formData.confirmPassword) {
         newErrors.confirmPassword = "Las contraseñas no coinciden";
       }
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -301,42 +420,40 @@ export default function Register() {
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
-    
+
     setIsLoading(true);
     setErrors({});
-    
+
     try {
       console.log('📝 Enviando registro...');
-      console.log("Id médico en formData",formData.idMedico);
+      console.log("Id médico en formData", formData.idMedico);
 
-      const registroPayload: any={
+      const registroPayload: any = {
         nombre: formData.name,
-        correo: formData.email,
         fechaNacimiento: formData.fechaNacimiento,
+        status: 'activo',
+        correo: formData.email,
         contrasenia: formData.password,
         rol: formData.role,
+        idMedico: formData.idMedico,
       }
 
-      //Solamente incluir IdMedico si el rol es paciente
-      if(formData.role === 'paciente' && formData.idMedico){
-        registroPayload.idMedico = formData.idMedico;
-        console.log("Incluyendo idMedico en el payload:", formData.idMedico);
-      }
-      console.log("Payload de registro final:", registroPayload);
-      
-      await apiService.completarRegistroConInvitacion(registroPayload);
+      // **USO DE LA FUNCIÓN LOCAL COMPLETARREGISTRO**
+      await completarRegistro(registroPayload);
 
       console.log('✅ Registro completado exitosamente');
-      
+
       setSuccess(true);
-      
+
       setTimeout(() => {
         router.push("/authentication/login");
       }, 2000);
-      
+
     } catch (error: any) {
       console.error('❌ Error al completar registro:', error);
-      setErrors({ general: error.message || "Error al crear la cuenta" });
+      // Asegurar que el error sea un string
+      const errorMessage = error instanceof Error ? error.message : "Error al crear la cuenta";
+      setErrors({ general: errorMessage });
     } finally {
       setIsLoading(false);
     }
@@ -348,11 +465,11 @@ export default function Register() {
   if (estado === "verificando") {
     return (
       <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
-        <div 
+        <div
           className="hidden lg:block relative bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/images/medicaIndividual.jpg')" }}
         />
-        
+
         <div className="flex items-center justify-center p-8 bg-gradient-to-br from-pink-100 to-indigo-800">
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 text-center">
             <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-600 rounded-full animate-spin mx-auto mb-4"></div>
@@ -369,11 +486,11 @@ export default function Register() {
   if (estado === "invalido") {
     return (
       <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
-        <div 
+        <div
           className="hidden lg:block relative bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/images/medicaIndividual.jpg')" }}
         />
-        
+
         <div className="flex items-center justify-center p-8 bg-gradient-to-br from-pink-100 to-indigo-800">
           <div className="w-full max-w-md bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
@@ -383,9 +500,9 @@ export default function Register() {
             <p className="text-slate-600 mb-6">
               El enlace de invitación no es válido o ha expirado.
             </p>
-            <Button 
-              onClick={() => router.push("/")} 
-              disabled={false} 
+            <Button
+              onClick={() => router.push("/")}
+              disabled={false}
               className="w-full"
             >
               Volver al inicio
@@ -402,15 +519,15 @@ export default function Register() {
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2">
       {/* Sección de imagen - lado izquierdo */}
-      <div 
+      <div
         className="hidden lg:block relative bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/images/medicaIndividual.jpg')" }}
       />
-      
+
       {/* Sección de formulario - lado derecho */}
       <div className="flex items-center justify-center p-8 bg-gradient-to-br from-pink-100 to-indigo-800">
         <div className="w-full max-w-md bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-8">
-          
+
           {/* Header */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
@@ -461,7 +578,7 @@ export default function Register() {
 
           {/* Form Steps */}
           <div className="space-y-5">
-            
+
             {/* Step 1: Personal Info */}
             {currentStep === 1 && (
               <div className="space-y-5 animate-in fade-in duration-300">
@@ -521,42 +638,42 @@ export default function Register() {
             )}
 
             {/* Step 2: Role Selection */}
-{currentStep === 2 && (
-  <div className="space-y-5 animate-in fade-in duration-300">
-    <div className="space-y-3">
-      <label className="block text-sm font-medium text-slate-700">
-        Tu rol en la plataforma
-      </label>
-      
-      {/* Mostrar el rol de forma informativa (no editable) */}
-      <div className="p-4 border-2 border-purple-600 bg-purple-50 rounded-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
-            <User className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="font-semibold text-slate-800 capitalize">
-              {formData.role === 'medico' ? 'Médico' : 
-               formData.role === 'cuidador' ? 'Cuidador' : 'Paciente'}
-            </div>
-            <div className="text-sm text-slate-600">
-              {formData.role === 'medico' ? 'Acompaña el proceso' : 
-               formData.role === 'cuidador' ? 'Sube los recuerdos' : 
-               'Recibo la terapia'}
-            </div>
-          </div>
-        </div>
-      </div>
+            {currentStep === 2 && (
+              <div className="space-y-5 animate-in fade-in duration-300">
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Tu rol en la plataforma
+                  </label>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-        <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-blue-800">
-          El rol fue asignado por el sistema y no puede ser modificado.
-        </p>
-      </div>
-    </div>
-  </div>
-)}
+                  {/* Mostrar el rol de forma informativa (no editable) */}
+                  <div className="p-4 border-2 border-purple-600 bg-purple-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-800 capitalize">
+                          {formData.role === 'medico' ? 'Médico' :
+                            formData.role === 'cuidador' ? 'Cuidador' : 'Paciente'}
+                        </div>
+                        <div className="text-sm text-slate-600">
+                          {formData.role === 'medico' ? 'Acompaña el proceso' :
+                            formData.role === 'cuidador' ? 'Sube los recuerdos' :
+                              'Recibo la terapia'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-800">
+                      El rol fue asignado por el sistema y no puede ser modificado.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Step 3: Password */}
             {currentStep === 3 && (
@@ -622,7 +739,7 @@ export default function Register() {
                 Atrás
               </Button>
             )}
-            
+
             {currentStep < totalSteps ? (
               <Button
                 type="button"
@@ -659,4 +776,4 @@ export default function Register() {
       </div>
     </div>
   );
-}
+} 

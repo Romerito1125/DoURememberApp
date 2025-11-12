@@ -3,11 +3,14 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react"
-import Input from "@/app/components/input"
+
+// Importaciones de componentes externos (asumiendo que existen en tu proyecto)
+import Input from "@/app/components/input" 
 import GoogleSignInButton from "@/app/components/auth/GoogleSignInButton"
 import GoogleOneTap from "@/app/components/auth/GoogleOneTap"
 import { createClient } from "@/utils/supabase/client"
-import Header from "@/app/components/header"
+import Header from "@/app/components/header" 
+
 
 interface FormData {
   email: string
@@ -28,30 +31,50 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
   const router = useRouter()
-  const supabase = createClient()
+  // Inicialización real del cliente Supabase
+  const supabase = createClient() 
 
   useEffect(() => {
+    // Lógica para verificar sesión existente
     const checkExistingSession = async () => {
       try {
         console.log('🔍 Verificando sesión existente...')
 
+        // Lógica Supabase (para sesiones de OAuth)
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (error) {
-          console.error('❌ Error al verificar sesión:', error)
+          console.error('❌ Error al verificar sesión con Supabase:', error)
           setIsCheckingSession(false)
           return
         }
 
+        let userSession: any = null;
+
+        // PRIORIDAD 1: Sesión de Supabase (si usas Oauth/Social Login)
         if (session) {
+            console.log('✅ Sesión activa de Supabase encontrada.')
+            userSession = { idUsuario: session.user.id, token: session.access_token };
+        } 
+        // PRIORIDAD 2: Sesión de Token de la API (si usas login manual y token se guarda en sessionStorage)
+        else {
+            const storedToken = sessionStorage.getItem('authToken');
+            const storedUserId = sessionStorage.getItem('userId');
+            if (storedToken && storedUserId) {
+                console.log('✅ Sesión activa de API Token encontrada.')
+                userSession = { idUsuario: storedUserId, token: storedToken };
+            }
+        }
+
+        if (userSession) {
           console.log('✅ Sesión activa encontrada, obteniendo datos del usuario...')
 
           try {
             const userResponse = await fetch(
-              `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${session.user.id}`,
+              `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${userSession.idUsuario}`,
               {
                 headers: {
-                  'Authorization': `Bearer ${session.access_token}`,
+                  'Authorization': `Bearer ${userSession.token}`,
                   'Content-Type': 'application/json',
                 }
               }
@@ -62,34 +85,48 @@ function LoginForm() {
               const usuario = userData.usuarios?.[0]
 
               if (usuario) {
+                let redirectPath = '/';
                 switch (usuario.rol) {
                   case 'medico':
-                    router.replace('/users/doctor')
-                    return
+                    redirectPath = '/users/doctor';
+                    break
                   case 'paciente':
-                    router.replace('/users/patient')
-                    return
+                    redirectPath = '/users/patient';
+                    break
                   case 'cuidador':
-                    router.replace('/users/cuidador')
-                    return
+                    redirectPath = '/users/cuidador';
+                    break
                   case 'administrador':
-                    router.replace('/users/admin')
-                    return
+                    redirectPath = '/users/admin';
+                    break
                 }
+                
+                // Aplicar el retraso para asegurar que la nueva ruta lea la sesión correctamente
+                console.log(`⏳ Redirigiendo a ${redirectPath} con retraso para asegurar el estado de la sesión...`);
+                setTimeout(() => {
+                    router.replace(redirectPath);
+                }, 300); 
+
+                return
               }
             } else {
               console.log('⚠️ No se pudieron obtener datos del usuario, limpiando sesión...')
+              // Limpiar tanto Supabase como sessionStorage
               await supabase.auth.signOut()
+              sessionStorage.removeItem('authToken');
+              sessionStorage.removeItem('userId');
             }
           } catch (err) {
             console.error('❌ Error al obtener datos del usuario:', err)
             await supabase.auth.signOut()
+            sessionStorage.removeItem('authToken');
+            sessionStorage.removeItem('userId');
           }
         }
 
         console.log('ℹ️ No hay sesión activa')
       } catch (error) {
-        console.error('❌ Error al verificar sesión:', error)
+        console.error('❌ Error general al verificar sesión:', error)
       } finally {
         setIsCheckingSession(false)
       }
@@ -137,7 +174,7 @@ function LoginForm() {
     setIsLoading(true)
 
     try {
-      console.log('Enviando solicitud de login...' + formData.email + ' ' + formData.password)
+      // 1. Petición de Login a la API
       const response = await fetch(`${API_URL}/api/usuarios-autenticacion/login`, {
         method: 'POST',
         headers: {
@@ -162,9 +199,13 @@ function LoginForm() {
         throw new Error('La respuesta del servidor no contiene token o idUsuario')
       }
 
-      localStorage.setItem('authToken', token)
-      localStorage.setItem('userId', idUsuario)
-      console.log('👤 Obteniendo información del usuario...')
+      // 2. Almacenar Token y ID (¡Paso crítico antes de la redirección!)
+      sessionStorage.setItem('authToken', token)
+      sessionStorage.setItem('userId', idUsuario)
+
+      console.log('✅ Login exitoso. Token almacenado en sessionStorage.')
+      
+      // 3. Obtener información del usuario (Rol)
       const userResponse = await fetch(
         `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${idUsuario}`,
         {
@@ -189,33 +230,54 @@ function LoginForm() {
       const rol = usuario.rol
       console.log(`🎯 Usuario con rol: ${rol}`)
 
-      // Redirigir según el rol
+      let redirectPath: string;
+      // 4. Determinar la ruta de redirección
       switch (rol) {
         case 'medico':
-          router.replace('/users/doctor')
+          redirectPath = '/users/doctor';
           break
         case 'paciente':
-          router.replace('/users/patient')
+          redirectPath = '/users/patient';
           break
         case 'cuidador':
-          router.replace('/users/cuidador')
+          redirectPath = '/users/cuidador';
           break
         case 'administrador':
-          router.replace('/users/admin')
+          redirectPath = '/users/admin';
           break
         default:
-          router.replace('/')
+          redirectPath = '/';
       }
+
+      // 5. Redirigir con retraso estratégico para evitar el race condition
+      console.log(`⏳ Redirigiendo a ${redirectPath} con retraso de 300ms...`);
+
+      setTimeout(() => {
+          router.replace(redirectPath);
+      }, 300); 
+
     } catch (error: any) {
       console.error('❌ Error en login:', error)
       setErrors({
         general: error.message || 'Error al iniciar sesión. Verifica tus credenciales.',
       })
+      // Asegurarse de limpiar la sesión si falló a mitad del proceso
+      sessionStorage.removeItem('authToken');
+      sessionStorage.removeItem('userId');
     } finally {
       setIsLoading(false)
     }
   }
 
+
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-10 h-10 animate-spin text-purple-600" />
+        <p className="ml-3 text-lg text-slate-700">Cargando sesión...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -262,7 +324,7 @@ function LoginForm() {
                   type="email"
                   icon={Mail}
                   value={formData.email}
-                  onChange={(e) => {
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setFormData({ ...formData, email: e.target.value })
                     if (errors.email) setErrors({ ...errors, email: undefined })
                   }}
@@ -276,7 +338,7 @@ function LoginForm() {
                   type="password"
                   icon={Lock}
                   value={formData.password}
-                  onChange={(e) => {
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     setFormData({ ...formData, password: e.target.value })
                     if (errors.password) setErrors({ ...errors, password: undefined })
                   }}
@@ -286,6 +348,9 @@ function LoginForm() {
                 />
 
                 <div className="flex items-center justify-between text-sm">
+                  <button type="button" onClick={goToResetPassword} className="text-purple-600 hover:text-purple-700 font-medium">
+                    ¿Olvidaste tu contraseña?
+                  </button>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -294,7 +359,6 @@ function LoginForm() {
                     />
                     <span className="text-slate-600">Recordarme</span>
                   </label>
-
                 </div>
 
                 <button
@@ -312,7 +376,12 @@ function LoginForm() {
                   )}
                 </button>
 
-
+                <div className="text-center text-sm mt-4">
+                  <span className="text-slate-600">¿No tienes cuenta? </span>
+                  <button type="button" onClick={goToSignUp} className="text-purple-600 hover:text-purple-700 font-medium">
+                    Regístrate
+                  </button>
+                </div>
               </form>
             </div>
           </div>
