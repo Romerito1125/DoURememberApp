@@ -1,5 +1,11 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
 
+interface Usuario {
+  idUsuario: string
+  rol: string
+  // otros campos que tenga tu usuario
+}
+
 export const assignmentService = {
   /**
    * Asignar cuidador a paciente
@@ -152,7 +158,7 @@ export const assignmentService = {
   /**
    * Obtener cuidadores de un paciente
    */
-  async getCaregiversByPatient(idPaciente: string, token: string) {
+  async getCaregiversByPatient(idPaciente: string, token: string): Promise<Usuario[]> {
     try {
       console.log(`🔍 Obteniendo cuidadores del paciente ${idPaciente}...`)
       
@@ -166,7 +172,7 @@ export const assignmentService = {
       }
 
       // Verificar cada cuidador para ver si tiene asignado este paciente
-      const caregiversWithPatient = []
+      const caregiversWithPatient: Usuario[] = []
       
       for (const caregiver of allCaregivers) {
         try {
