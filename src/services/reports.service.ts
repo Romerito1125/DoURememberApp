@@ -479,50 +479,50 @@ async getPatientBaseline(patientId: string): Promise<SessionDetails | null> {
   /**
    * Calcula el resumen estadístico de las sesiones
    */
-  private calculateSummary(sessions: SessionData[]): PatientSummary {
-    if (sessions.length === 0) {
-      return {
-        count: 0,
-        avgSessionTotal: 0,
-        avgRecall: 0,
-        firstSessionTotal: 0,
-        lastSessionTotal: 0,
-        trend_sessionTotal: 'stable',
-        slopePerDay_sessionTotal: null
-      }
-    }
-
-    const count = sessions.length
-    const avgSessionTotal = sessions.reduce((sum, s) => sum + (s.sessionTotal || 0), 0) / count
-    const avgRecall = sessions.reduce((sum, s) => sum + (s.sessionRecall || 0), 0) / count
-    const firstSessionTotal = sessions[0].sessionTotal || 0
-    const lastSessionTotal = sessions[count - 1].sessionTotal || 0
-
-    let trend_sessionTotal = 'stable'
-    const diff = lastSessionTotal - firstSessionTotal
-    if (diff > 0.05) trend_sessionTotal = 'improving'
-    else if (diff < -0.05) trend_sessionTotal = 'declining'
-
-    let slopePerDay_sessionTotal = null
-    if (count >= 2) {
-      const firstDate = new Date(sessions[0].fechaInicio || sessions[0].fechaCreacion).getTime()
-      const lastDate = new Date(sessions[count - 1].fechaInicio || sessions[count - 1].fechaCreacion).getTime()
-      const days = (lastDate - firstDate) / (1000 * 60 * 60 * 24)
-      if (days > 0) {
-        slopePerDay_sessionTotal = diff / days
-      }
-    }
-
+private calculateSummary(sessions: SessionData[]): PatientSummary {
+  if (sessions.length === 0) {
     return {
-      count,
-      avgSessionTotal,
-      avgRecall,
-      firstSessionTotal,
-      lastSessionTotal,
-      trend_sessionTotal,
-      slopePerDay_sessionTotal
+      count: 0,
+      avgSessionTotal: 0,
+      avgRecall: 0,
+      firstSessionTotal: 0,
+      lastSessionTotal: 0,
+      trend_sessionTotal: 'stable',
+      slopePerDay_sessionTotal: null
     }
   }
+
+  const count = sessions.length
+  const avgSessionTotal = sessions.reduce((sum, s) => sum + (s.sessionTotal || 0), 0) / count
+  const avgRecall = sessions.reduce((sum, s) => sum + (s.sessionRecall || 0), 0) / count
+  const firstSessionTotal = sessions[0].sessionTotal || 0
+  const lastSessionTotal = sessions[count - 1].sessionTotal || 0
+
+  let trend_sessionTotal = 'stable'
+  const diff = lastSessionTotal - firstSessionTotal
+  if (diff > 0.05) trend_sessionTotal = 'improving'
+  else if (diff < -0.05) trend_sessionTotal = 'declining'
+
+  let slopePerDay_sessionTotal: number | null = null  // 👈 CAMBIO AQUÍ: declarar el tipo explícitamente
+  if (count >= 2) {
+    const firstDate = new Date(sessions[0].fechaInicio || sessions[0].fechaCreacion).getTime()
+    const lastDate = new Date(sessions[count - 1].fechaInicio || sessions[count - 1].fechaCreacion).getTime()
+    const days = (lastDate - firstDate) / (1000 * 60 * 60 * 24)
+    if (days > 0) {
+      slopePerDay_sessionTotal = diff / days
+    }
+  }
+
+  return {
+    count,
+    avgSessionTotal,
+    avgRecall,
+    firstSessionTotal,
+    lastSessionTotal,
+    trend_sessionTotal,
+    slopePerDay_sessionTotal
+  }
+}
 
   // Utilidades de formato
   toPercentage(value: number): string {
