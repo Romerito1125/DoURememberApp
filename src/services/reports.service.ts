@@ -89,9 +89,9 @@ export interface SessionDetails {
 }
 
 class ReportsService {
-  private baseURL = 'http://localhost:3000/api/descripciones-imagenes'
-  private reportesURL = 'http://localhost:3000/api/alertas-reportes'
-  private authURL = 'http://localhost:3000/api/usuarios-autenticacion'
+  private baseURL = 'http://34.117.162.170/api/descripciones-imagenes'
+  private reportesURL = 'http://34.117.162.170/api/alertas-reportes'
+  private authURL = 'http://34.117.162.170/api/usuarios-autenticacion'
 
   /**
    * Obtiene la lista de todos los pacientes

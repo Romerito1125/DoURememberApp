@@ -21,7 +21,7 @@ interface FormErrors {
   general?: string
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://34.117.162.170'
 
 function LoginForm() {
   const [formData, setFormData] = useState<FormData>({ email: "", password: "" })

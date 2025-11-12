@@ -20,7 +20,7 @@ import Footer from "@/app/components/footer"
 import WelcomeModal from "@/app/components/photos/WelcomeModal"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://localhost:3000'
+const API_URL = 'http://34.117.162.170'
 
 interface Photo {
   idImagen: number

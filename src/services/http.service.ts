@@ -1,6 +1,6 @@
 import { authService } from './auth.service'
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://34.117.162.170'
 
 class HttpService {
   

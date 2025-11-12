@@ -6,7 +6,7 @@ import Image from "next/image"
 import { Heart, Users, Calendar, Shield, ArrowRight, Loader2 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'http://34.117.162.170/api'
 
 export default function HomePage() {
   const router = useRouter()

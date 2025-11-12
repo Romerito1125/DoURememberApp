@@ -1,373 +1,346 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Header from "@/app/components/header"
 import Footer from "@/app/components/footer"
-import PhotoForm from "@/app/components/photos/PhotoForm"
-import { CheckCircle, AlertCircle, Image as ImageIcon, Trash2 } from "lucide-react"
+import DeletePhotoModal from "@/app/components/photos/DeletePhotoModal"
+import { Plus, Trash2, Image as ImageIcon, CheckCircle, X, Loader2, Calendar } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 
-const API_URL = 'http://localhost:3000/api'
+const API_URL = 'http://34.117.162.170'
 
-interface UploadedPhoto {
+interface Photo {
   idImagen: number
   urlImagen: string
-  groundTruthData: {
-    people: string
-    location: string
-    context: string
-    keywords: string[]
-  }
+  fechaSubida: string
+  idCuidador: string
+  idAsset?: string
+  idPublicImage?: string
+  formato?: string
 }
 
-async function uploadImage(file: File, userId: string, token: string) {
-  const formData = new FormData()
-  formData.append('file', file)
-
-  const response = await fetch(`${API_URL}/descripciones-imagenes/uploadImage/${userId}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    },
-    body: formData
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(errorData.message || 'Error al subir imagen')
-  }
-  
-  return response.json()
-}
-
-async function crearGroundTruth(data: {
-  texto: string
-  idImagen: number
-  palabrasClave: string[]
-  preguntasGuiaPaciente: string[]
-}, token: string) {
-  const response = await fetch(`${API_URL}/descripciones-imagenes/crearGroundTruth`, {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(data)
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(errorData.message || 'Error al crear ground truth')
-  }
-  
-  return response.json()
-}
-
-async function eliminarImagen(idImagen: number, token: string) {
-  const response = await fetch(`${API_URL}/descripciones-imagenes/eliminar/${idImagen}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json()
-    throw new Error(errorData.message || 'Error al eliminar imagen')
-  }
-  
-  return response.json()
-}
-
-export default function UploadPhotoPage() {
+export default function PhotosListPage() {
   const router = useRouter()
-  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([])
-  const [error, setError] = useState("")
-  const [isUploading, setIsUploading] = useState(false)
-  const [showForm, setShowForm] = useState(true)
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean
+    photoId: number
+    photoName: string
+  }>({
+    isOpen: false,
+    photoId: 0,
+    photoName: "",
+  })
+  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false)
 
-  const handleSubmit = async (data: any) => {
-    setIsUploading(true)
-    setError("")
+  useEffect(() => {
+    loadPhotos()
+  }, [])
 
+  useEffect(() => {
+    if (selectedPhoto) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = 'unset'
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [selectedPhoto])
+
+  const loadPhotos = async () => {
+    setIsLoading(true)
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      const { data: { session } } = await supabase.auth.getSession()
       
-      if (!user || !session?.access_token) {
-        throw new Error('Debes iniciar sesión para subir fotos')
+      if (!user) {
+        alert('Debes iniciar sesión')
+        router.push('/authentication/login')
+        return
       }
 
-      const token = session.access_token
+      const response = await fetch(
+        `${API_URL}/api/descripciones-imagenes/listarImagenes/${user.id}?page=1&limit=100`
+      )
 
-      const blob = await fetch(data.imageData).then(r => r.blob())
-      const file = new File([blob], data.fileName, { type: 'image/jpeg' })
-
-      const imagenResponse = await uploadImage(file, user.id, token)
-      const idImagen = imagenResponse.idImagen
-
-      // Parsear palabras clave desde el input del usuario
-      const palabrasClaveUsuario = data.keywords 
-        ? data.keywords.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0)
-        : []
-
-      // Generar palabras clave automáticas como backup
-      const palabrasClaveAuto = [
-        ...data.people.split(',').map((p: string) => p.trim()).filter((p: string) => p.length > 2),
-        ...data.location.split(' ').filter((p: string) => p.length > 2),
-        ...data.context.split(' ').slice(0, 5).filter((p: string) => p.length > 2)
-      ]
-
-      // Combinar palabras clave del usuario con automáticas (prioridad a las del usuario)
-      const palabrasClaveFinal = palabrasClaveUsuario.length > 0 
-        ? palabrasClaveUsuario 
-        : palabrasClaveAuto.slice(0, 10)
-
-      await crearGroundTruth({
-        texto: `Personas: ${data.people}. Lugar: ${data.location}. Contexto: ${data.context}`,
-        idImagen,
-        palabrasClave: palabrasClaveFinal,
-        preguntasGuiaPaciente: [
-          '¿Quiénes están en la foto?',
-          '¿Dónde fue tomada esta foto?',
-          '¿Qué evento o momento representa?'
-        ]
-      }, token)
-
-      setUploadedPhotos(prev => [...prev, {
-        idImagen,
-        urlImagen: imagenResponse.urlImagen,
-        groundTruthData: {
-          people: data.people,
-          location: data.location,
-          context: data.context,
-          keywords: palabrasClaveFinal
-        }
-      }])
-
-      setShowForm(false)
-      setTimeout(() => setShowForm(true), 100)
-
-    } catch (err: any) {
-      console.error("Error:", err)
-      setError(err.message || "Error al subir la foto. Intenta nuevamente.")
+      if (!response.ok) throw new Error('Error al cargar imágenes')
+      
+      const data = await response.json()
+      
+      // ✅ CORRECCIÓN: Según tu endpoint, la respuesta es { data: [...], meta: {...} }
+      setPhotos(data.data || [])
+      
+    } catch (error) {
+      console.error('Error al cargar fotos:', error)
+      alert('Error al cargar las imágenes')
     } finally {
-      setIsUploading(false)
+      setIsLoading(false)
     }
   }
 
-  const handleDelete = async (idImagen: number) => {
-    if (!confirm('¿Estás seguro de eliminar esta foto?')) return
+  const handlePhotoClick = (photo: Photo) => {
+    setSelectedPhoto(photo)
+  }
 
+  const closePhotoDetail = () => {
+    setSelectedPhoto(null)
+  }
+
+  const handleDeleteClick = (photo: Photo, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDeleteModal({
+      isOpen: true,
+      photoId: photo.idImagen,
+      photoName: `Imagen #${photo.idImagen}`,
+    })
+  }
+
+  const handleDeleteConfirm = async (photoId: string) => {
     try {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session?.access_token) {
-        throw new Error('Sesión expirada')
-      }
+      const response = await fetch(`${API_URL}/descripciones-imagenes/eliminar/${photoId}`, {
+        method: 'DELETE'
+      })
 
-      await eliminarImagen(idImagen, session.access_token)
+      if (!response.ok) throw new Error('Error al eliminar imagen')
+
+      // Actualizar lista local
+      setPhotos(photos.filter(photo => photo.idImagen !== parseInt(photoId)))
+
+      setDeleteModal({ isOpen: false, photoId: 0, photoName: "" })
+      setShowDeleteSuccess(true)
+      setTimeout(() => setShowDeleteSuccess(false), 3000)
       
-      setUploadedPhotos(prev => prev.filter(p => p.idImagen !== idImagen))
-    } catch (err: any) {
-      setError(err.message || 'Error al eliminar la foto')
+    } catch (error) {
+      console.error('Error al eliminar:', error)
+      throw error // Propagar el error al modal
     }
   }
 
-  const handleFinish = () => {
-    if (uploadedPhotos.length === 0) {
-      router.push('/photos/gallery')
-    } else {
-      router.push('/sessions/create')
-    }
+  const handleDeleteCancel = () => {
+    setDeleteModal({ isOpen: false, photoId: 0, photoName: "" })
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("es-ES", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
+            <p className="text-slate-600">Cargando imágenes...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex flex-col">
-      {/* Header */}
-      <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 border-b border-purple-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <Header />
-        </div>
-      </div>
-
-      <main className="flex-1 container mx-auto px-6 py-12">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <Header />
+      <main className="flex-1 container mx-auto px-6 py-8">
         <div className="max-w-6xl mx-auto">
-          {/* Encabezado */}
-          <div className="mb-10">
-            <h1 className="text-4xl font-bold text-slate-900 mb-3">
-              Cargar Imágenes
-            </h1>
-            <p className="text-slate-600 text-lg">
-              Sube las fotos que usarás en las sesiones de evaluación. Puedes subir cuantas necesites.
-            </p>
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-800 mb-2">
+                Imágenes Familiares
+              </h1>
+              <p className="text-slate-600">
+                Gestiona las fotografías del paciente para las evaluaciones cognitivas.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => router.push("/sessions/create")}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <Calendar className="w-5 h-5" />
+                Nueva Sesión
+              </button>
+
+              <button
+                onClick={() => router.push("/photos/upload")}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Nueva Imagen
+              </button>
+            </div>
           </div>
 
-          {/* Mensaje de Error */}
-          {error && (
-            <div className="mb-8 bg-gradient-to-r from-red-50 to-red-100 border-2 border-red-300 rounded-2xl p-6 shadow-lg">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-red-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <AlertCircle className="w-6 h-6 text-red-700" />
-                </div>
-                <div>
-                  <p className="text-red-900 font-bold text-lg mb-1">Error</p>
-                  <p className="text-red-800">{error}</p>
-                </div>
-              </div>
+          {showDeleteSuccess && (
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start">
+              <CheckCircle className="w-5 h-5 text-green-600 mr-3 flex-shrink-0 mt-0.5" />
+              <p className="text-green-800">
+                La imagen ha sido eliminada exitosamente.
+              </p>
             </div>
           )}
 
-          {/* Grid Principal */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Columna Izquierda - Formulario */}
-            <div className="space-y-6">
-              <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
-                <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-200">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-                    <ImageIcon className="w-6 h-6 text-white" />
+          {photos.length === 0 ? (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+              <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ImageIcon className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-800 mb-2">
+                No hay imágenes cargadas
+              </h3>
+              <p className="text-slate-600 mb-6">
+                Comienza agregando fotografías familiares para establecer la evaluación base.
+              </p>
+              <button
+                onClick={() => router.push("/photos/upload")}
+                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors inline-flex items-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Cargar Primera Imagen
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {photos.map((photo) => (
+                <div
+                  key={photo.idImagen}
+                  onClick={() => handlePhotoClick(photo)}
+                  className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-all cursor-pointer transform hover:scale-[1.02]"
+                >
+                  <div className="h-48 bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={photo.urlImagen} 
+                      alt={`Imagen ${photo.idImagen}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%23f1f5f9' width='400' height='400'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-size='16'%3EImagen no disponible%3C/text%3E%3C/svg%3E"
+                      }}
+                    />
                   </div>
-                  <h2 className="text-2xl font-bold text-slate-900">
-                    Subir Nueva Foto
-                  </h2>
-                </div>
-                
-                {showForm && (
-                  <PhotoForm
-                    onSubmit={handleSubmit}
-                    onCancel={() => router.push("/users/cuidador")}
-                    isUploading={isUploading}
-                  />
-                )}
 
-                {isUploading && (
-                  <div className="mt-6 bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-5">
-                    <div className="flex items-center gap-4">
-                      <div className="w-6 h-6 border-3 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                      <p className="text-purple-900 font-semibold text-lg">
-                        Subiendo imagen...
+                  <div className="p-4">
+                    <h3 className="font-semibold text-slate-800 mb-2">
+                      Imagen #{photo.idImagen}
+                    </h3>
+                    
+                    <div className="space-y-2 text-sm text-slate-600 mb-4">
+                      <p>
+                        <span className="font-medium">Formato:</span> {photo.formato?.toUpperCase() || 'N/A'}
+                      </p>
+                      <p>
+                        <span className="font-medium">Subida:</span> {formatDate(photo.fechaSubida)}
                       </p>
                     </div>
-                  </div>
-                )}
-              </div>
 
-              {/* Nota Informativa */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-2xl p-6 shadow-md">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 bg-blue-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <AlertCircle className="w-5 h-5 text-blue-700" />
-                  </div>
-                  <div>
-                    <p className="text-blue-900 font-semibold mb-2">Información importante</p>
-                    <p className="text-blue-800 text-sm leading-relaxed">
-                      Las fotos se guardarán individualmente. Luego podrás seleccionar hasta 3 fotos para crear una sesión de evaluación.
-                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => handleDeleteClick(photo, e)}
+                        className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Modal de Detalles */}
+      {selectedPhoto && (
+        <div 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={closePhotoDetail}
+        >
+          <div 
+            className="bg-white rounded-xl max-w-3xl w-full max-h-[85vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-800">Imagen #{selectedPhoto.idImagen}</h2>
+              <button
+                onClick={closePhotoDetail}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-600" />
+              </button>
             </div>
 
-            {/* Columna Derecha - Galería */}
-            <div>
-              <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
-                <div className="flex justify-between items-center mb-6 pb-6 border-b border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
-                      <ImageIcon className="w-5 h-5 text-white" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-slate-900">
-                      Fotos Subidas
-                    </h2>
-                  </div>
-                  <span className="px-4 py-2 bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-800 rounded-xl font-bold text-sm border border-purple-200">
-                    {uploadedPhotos.length} foto(s)
-                  </span>
+            <div className="overflow-y-auto max-h-[calc(85vh-80px)]">
+              <div className="p-6">
+                <div className="mb-6 rounded-lg overflow-hidden bg-slate-50">
+                  <img
+                    src={selectedPhoto.urlImagen}
+                    alt={`Imagen ${selectedPhoto.idImagen}`}
+                    className="w-full h-auto object-contain max-h-96"
+                    onError={(e) => {
+                      e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Crect fill='%23f1f5f9' width='400' height='400'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-size='16'%3EImagen no disponible%3C/text%3E%3C/svg%3E"
+                    }}
+                  />
                 </div>
 
-                {uploadedPhotos.length === 0 ? (
-                  <div className="text-center py-16">
-                    <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-                      <ImageIcon className="w-12 h-12 text-slate-400" />
-                    </div>
-                    <p className="text-slate-600 font-medium text-lg">
-                      Aún no has subido ninguna foto
-                    </p>
-                    <p className="text-slate-500 text-sm mt-2">
-                      Comienza subiendo tu primera imagen
-                    </p>
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                      ID de Imagen
+                    </h3>
+                    <p className="text-slate-800 text-base">{selectedPhoto.idImagen}</p>
                   </div>
-                ) : (
-                  <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                    {uploadedPhotos.map((photo) => (
-                      <div
-                        key={photo.idImagen}
-                        className="border-2 border-slate-200 rounded-2xl p-5 hover:border-purple-300 hover:shadow-md transition-all duration-300 bg-gradient-to-br from-white to-slate-50"
-                      >
-                        <div className="flex gap-5">
-                          <div className="flex-shrink-0">
-                            <img
-                              src={photo.urlImagen}
-                              alt="Foto subida"
-                              className="w-28 h-28 object-cover rounded-xl shadow-md border-2 border-slate-200"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="space-y-2 mb-3">
-                              <p className="text-sm text-slate-800">
-                                <span className="font-bold text-slate-900">Personas:</span> {photo.groundTruthData.people}
-                              </p>
-                              <p className="text-sm text-slate-700">
-                                <span className="font-bold text-slate-900">Lugar:</span> {photo.groundTruthData.location}
-                              </p>
-                              <p className="text-sm text-slate-700">
-                                <span className="font-bold text-slate-900">Contexto:</span> {photo.groundTruthData.context}
-                              </p>
-                            </div>
-                            {photo.groundTruthData.keywords.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mt-3">
-                                {photo.groundTruthData.keywords.map((keyword, idx) => (
-                                  <span 
-                                    key={idx} 
-                                    className="px-3 py-1.5 bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-800 text-xs font-semibold rounded-lg border border-purple-200"
-                                  >
-                                    {keyword}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => handleDelete(photo.idImagen)}
-                            className="flex-shrink-0 w-10 h-10 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-xl transition-colors duration-200 flex items-center justify-center border border-red-200"
-                            title="Eliminar foto"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
-                {uploadedPhotos.length > 0 && (
-                  <div className="mt-8 pt-6 border-t border-slate-200">
-                    <button
-                      onClick={handleFinish}
-                      className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 font-bold text-lg shadow-lg hover:shadow-xl"
-                    >
-                      Finalizar y Crear Sesión
-                    </button>
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                      Formato
+                    </h3>
+                    <p className="text-slate-800 text-base">{selectedPhoto.formato?.toUpperCase() || 'N/A'}</p>
                   </div>
-                )}
+
+                  <div className="pt-4 border-t border-slate-200">
+                    <p className="text-sm text-slate-600">
+                      <span className="font-medium">Fecha de carga:</span> {formatDate(selectedPhoto.fechaSubida)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200">
+                  <button
+                    onClick={() => {
+                      closePhotoDetail()
+                      handleDeleteClick(selectedPhoto, { stopPropagation: () => {} } as React.MouseEvent)
+                    }}
+                    className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center gap-2 font-medium"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </main>
+      )}
+
+      <DeletePhotoModal
+        isOpen={deleteModal.isOpen}
+        photoId={deleteModal.photoId.toString()}
+        photoName={deleteModal.photoName}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
+
       <Footer />
     </div>
   )
