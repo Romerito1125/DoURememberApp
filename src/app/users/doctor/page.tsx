@@ -179,7 +179,8 @@ export default function DoctorPage() {
                 }
 
                 if (!response.ok) {
-                    console.error("❌ Error al obtener el usuario:", response.status)
+                    // Loguea el status code exacto para un mejor diagnóstico.
+                    console.error(`❌ Error al obtener el usuario. Status: ${response.status}. Mensaje: ${await response.text()}`)
                     throw new Error("Error en la respuesta del servidor.")
                 }
 
