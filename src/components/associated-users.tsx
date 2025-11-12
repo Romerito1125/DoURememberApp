@@ -26,6 +26,14 @@ interface Patient {
   }
 }
 
+interface Cuidador {
+  idUsuario?: string
+  idCuidador?: string
+  nombre?: string
+  correo?: string
+  email?: string
+}
+
 export function AssociatedUsers() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -42,88 +50,101 @@ export function AssociatedUsers() {
   }, [])
 
   const loadPatients = async () => {
-    try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!user || !session) return
+  try {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!user || !session) return
 
-      const token = session.access_token
+    const token = session.access_token
 
-      // Obtener pacientes del médico
-      const response = await fetch(
-        `${API_URL}/usuarios-autenticacion/pacientesDeMedico/${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+    // Obtener pacientes del médico
+    const response = await fetch(
+      `${API_URL}/usuarios-autenticacion/pacientesDeMedico/${user.id}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      )
-      
-      if (!response.ok) throw new Error('Error al obtener pacientes')
-      
-      const data = await response.json()
-      const pacientesList = data.pacientes || []
+      }
+    )
+    
+    if (!response.ok) throw new Error('Error al obtener pacientes')
+    
+    const data = await response.json()
+    const pacientesList = data.pacientes || []
 
-      // Para cada paciente, obtener sus cuidadores y sesiones completadas
-      const pacientesConDatos = await Promise.all(
-        pacientesList.map(async (paciente: any) => {
-          try {
-            // Obtener cuidadores del paciente usando la misma lógica de PatientList
-            const caregiversList = await assignmentService.getCaregiversByPatient(paciente.idUsuario, token)
+    // Para cada paciente, obtener sus cuidadores y sesiones completadas
+    const pacientesConDatos = await Promise.all(
+      pacientesList.map(async (paciente: any) => {
+        try {
+          // Obtener cuidadores del paciente - tipar correctamente
+          const caregiversList: Cuidador[] = await assignmentService.getCaregiversByPatient(paciente.idUsuario, token)
+          
+          // Manejo defensivo de datos del cuidador
+          let cuidadorPrincipal: { idCuidador: string; nombre: string; correo: string } | null = null
+          
+          if (Array.isArray(caregiversList) && caregiversList.length > 0) {
+            const primerCuidador = caregiversList[0]
             
-            // Tomar el primer cuidador como cuidador principal (si existe)
-            const cuidadorPrincipal = caregiversList.length > 0 ? {
-              idCuidador: caregiversList[0].idUsuario || caregiversList[0].idCuidador,
-              nombre: caregiversList[0].nombre,
-              correo: caregiversList[0].correo
-            } : null
-
-            // Obtener sesiones completadas
-            let sesionesCompletadas = 0
-            try {
-              const sesionesResponse = await fetch(
-                `${API_URL}/descripciones-imagenes/listarSesionesGt?idPaciente=${paciente.idUsuario}&estado_sesion=completado&page=1&limit=1`,
-                {
-                  headers: {
-                    'Authorization': `Bearer ${token}`
-                  }
-                }
-              )
+            // Verificar que el objeto tenga las propiedades necesarias
+            if (primerCuidador && (primerCuidador.idUsuario || primerCuidador.idCuidador)) {
+              const idCuidador = primerCuidador.idUsuario || primerCuidador.idCuidador || ''
+              const nombre = primerCuidador.nombre || 'Sin nombre'
+              const correo = primerCuidador.correo || primerCuidador.email || ''
               
-              if (sesionesResponse.ok) {
-                const sesionesData = await sesionesResponse.json()
-                sesionesCompletadas = sesionesData.meta?.total || 0
+              cuidadorPrincipal = {
+                idCuidador,
+                nombre,
+                correo
               }
-            } catch (error) {
-              console.error(`Error al obtener sesiones del paciente ${paciente.idUsuario}:`, error)
             }
+          }
 
-            return {
-              ...paciente,
-              cuidador: cuidadorPrincipal,
-              sesionesCompletadas
+          // Obtener sesiones completadas
+          let sesionesCompletadas = 0
+          try {
+            const sesionesResponse = await fetch(
+              `${API_URL}/descripciones-imagenes/listarSesionesGt?idPaciente=${paciente.idUsuario}&estado_sesion=completado&page=1&limit=1`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              }
+            )
+            
+            if (sesionesResponse.ok) {
+              const sesionesData = await sesionesResponse.json()
+              sesionesCompletadas = sesionesData.meta?.total || 0
             }
           } catch (error) {
-            console.error(`Error al obtener datos del paciente ${paciente.idUsuario}:`, error)
-            return {
-              ...paciente,
-              sesionesCompletadas: 0,
-              cuidador: null
-            }
+            console.error(`Error al obtener sesiones del paciente ${paciente.idUsuario}:`, error)
           }
-        })
-      )
 
-      setPatients(pacientesConDatos)
+          return {
+            ...paciente,
+            cuidador: cuidadorPrincipal,
+            sesionesCompletadas
+          }
+        } catch (error) {
+          console.error(`Error al obtener datos del paciente ${paciente.idUsuario}:`, error)
+          return {
+            ...paciente,
+            sesionesCompletadas: 0,
+            cuidador: null
+          }
+        }
+      })
+    )
 
-    } catch (error) {
-      console.error('Error al cargar pacientes:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    setPatients(pacientesConDatos)
+
+  } catch (error) {
+    console.error('Error al cargar pacientes:', error)
+  } finally {
+    setIsLoading(false)
   }
+}
 
 
 
