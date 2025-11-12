@@ -15,6 +15,7 @@ import { UserPlus, FileText, LogOut, Users, Activity, User } from "lucide-react"
 import BaselineReportsModule from "@/app/components/reports/BaseLineReportsModule"
 import BaselineReportsStats from "@/app/components/reports/BaseLineReportsStats"
 
+// Asegúrate de que API_URL se esté cargando correctamente en tu entorno
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 interface Patient {
@@ -36,7 +37,8 @@ interface Caregiver {
 export default function DoctorPage() {
     const [patients, setPatients] = useState<Patient[]>([])
     const [allCaregivers, setAllCaregivers] = useState<Caregiver[]>([])
-    const [isLoading, setIsLoading] = useState<boolean>(true)
+    // ✅ CORRECCIÓN CLAVE: isLoading inicializado en TRUE para bloquear render inicial
+    const [isLoading, setIsLoading] = useState<boolean>(true) 
     const [doctorName, setDoctorName] = useState<string>("")
     const [doctorId, setDoctorId] = useState<string>("")
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -47,99 +49,16 @@ export default function DoctorPage() {
     const [refreshKey, setRefreshKey] = useState(0)
     const router = useRouter()
 
-    useEffect(() => {
-        const initializeData = async () => {
-            try {
-                console.log("🔍 Inicializando datos...")
-
-                const token = localStorage.getItem("authToken")
-                const idMedico = localStorage.getItem("userId")
-
-                if (!API_URL) {
-                    console.error("❌ API_URL no está definido. Revisa tu archivo .env.local")
-                    return
-                }
-
-                // Si no hay token o ID, redirigimos
-                if (!token || !idMedico) {
-                    console.warn("⚠️ No hay token o ID de usuario")
-                    router.replace("/authentication/login")
-                    return
-                }
-
-                // ✅ Petición al backend
-                const response = await fetch(
-                    `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${idMedico}`,
-                    {
-                        method: "GET",
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                            "Content-Type": "application/json",
-                        },
-                    }
-                )
-
-                if (response.status === 401) {
-                    console.warn("❌ Token expirado o no autorizado")
-                    localStorage.clear()
-                    sessionStorage.clear()
-                    router.replace("/authentication/login")
-                    return
-                }
-
-                if (!response.ok) {
-                    console.error("❌ Error al obtener el usuario:", response.status)
-                    return
-                }
-
-                const dataUsuario = await response.json()
-                console.log("👨‍⚕️ Datos de usuario recibidos:", dataUsuario)
-
-                // 🔹 Adaptación flexible al formato del backend
-                const usuario =
-                    dataUsuario?.usuarios?.[0] ||
-                    dataUsuario?.usuario ||
-                    dataUsuario
-
-                if (!usuario) {
-                    console.warn("⚠️ No se encontró información del usuario en la respuesta")
-                    return
-                }
-
-                if (usuario.rol && usuario.rol !== "medico") {
-                    alert("Acceso restringido: esta cuenta no es de médico.")
-                    router.replace("/authentication/login")
-                    return
-                }
-
-                // ✅ Guardamos info del doctor
-                setDoctorName(usuario.nombre || "Sin nombre")
-                const userId = usuario.idUsuario || usuario.id
-                setDoctorId(userId)
-
-                console.log("🩺 ID del médico:", userId)
-
-                // ✅ Cargamos datos relacionados
-                await loadData(userId)
-
-            } catch (error) {
-                console.error("🚨 Error al inicializar datos:", error)
-            } finally {
-                setIsLoading(false)
-            }
-        }
-
-        // Espera un tick para que localStorage esté disponible correctamente
-        setTimeout(initializeData, 100)
-    }, [router])
-
-
+    
+    // --- FUNCIÓN loadData CORREGIDA ---
     const loadData = async (idMedico: string) => {
-        setIsLoading(true)
+        // No se cambia setIsLoading aquí, ya lo maneja initializeData
         try {
-            const token = localStorage.getItem("authToken")
+            // ✅ CORRECCIÓN: Usar sessionStorage para obtener el token
+            const token = sessionStorage.getItem("authToken") 
             if (!token) throw new Error("No se encontró token de autenticación")
 
+            // Petición de Pacientes
             const patientsResponse = await fetch(
                 `${API_URL}/api/usuarios-autenticacion/pacientesDeMedico/${idMedico}`,
                 {
@@ -152,20 +71,20 @@ export default function DoctorPage() {
             )
 
             if (!patientsResponse.ok) {
+                // Si la respuesta es 401 aquí, es otra señal de token expirado
+                 if (patientsResponse.status === 401) {
+                    throw new Error("Token expirado o no autorizado (loadData)")
+                }
                 throw new Error("Error al obtener pacientes del médico")
             }
 
             const patientsData = await patientsResponse.json()
-
-            // 👇 Ajuste importante: asegurar estructura y evitar arrays vacíos
             const pacientes = Array.isArray(patientsData)
                 ? patientsData
                 : patientsData.pacientes || []
-
-            console.log("👨‍⚕️ Pacientes recibidos:", pacientes)
             setPatients(pacientes)
 
-            // 🔹 Obtener todos los cuidadores
+            // Obtener todos los cuidadores
             const allUsersResponse = await fetch(
                 `${API_URL}/api/usuarios-autenticacion/buscarUsuarios`,
                 {
@@ -178,6 +97,10 @@ export default function DoctorPage() {
             )
 
             if (!allUsersResponse.ok) {
+                // Si la respuesta es 401 aquí, es otra señal de token expirado
+                if (allUsersResponse.status === 401) {
+                    throw new Error("Token expirado o no autorizado (loadData)")
+                }
                 throw new Error("Error al obtener usuarios")
             }
 
@@ -186,17 +109,126 @@ export default function DoctorPage() {
                 allUsersData.usuarios?.filter((u: any) => u.rol === "cuidador") || []
             setAllCaregivers(caregivers)
         } catch (error) {
+             // Manejo de error de sesión, limpia y redirige
+            if (error instanceof Error && error.message.includes("Token expirado")) {
+                console.error("🚨 Redirigiendo por token expirado en loadData:", error)
+                localStorage.clear()
+                sessionStorage.clear()
+                router.replace("/authentication/login")
+                return
+            }
             console.error("❌ Error en loadData:", error)
-        } finally {
-            setIsLoading(false)
-        }
+        } 
+        // NOTE: No usamos finally aquí porque lo usamos en el useEffect principal
     }
 
+
+    // --- useEffect CORREGIDO ---
+    useEffect(() => {
+        const initializeData = async () => {
+            console.log("🔍 Inicializando datos y verificando sesión...")
+
+            // ✅ CORRECCIÓN: Usar sessionStorage para obtener token/ID
+            const token = sessionStorage.getItem("authToken") // <-- USAMOS sessionStorage
+            const idMedico = sessionStorage.getItem("userId")     // <-- USAMOS sessionStorage
+
+            // --- BLOQUEO DE ACCESO INMEDIATO EN EL NAVEGADOR ---
+            if (!token || !idMedico) {
+                console.warn("⚠️ No hay token o ID de usuario. Redirigiendo inmediatamente.")
+                
+                // Aseguramos la limpieza total
+                localStorage.clear()
+                sessionStorage.clear()
+                
+                // Redirigimos y terminamos la ejecución
+                router.replace("/authentication/login") 
+                // Establecemos isLoading a false para que la condición de render no se quede colgada
+                setIsLoading(false) 
+                return 
+            }
+            // --- FIN BLOQUEO DE ACCESO INMEDIATO ---
+            
+            // Si llegamos aquí, tenemos token y ID, procedemos
+            setDoctorId(idMedico)
+
+            if (!API_URL) {
+                console.error("❌ API_URL no está definido. Revisa tu archivo .env.local")
+                setIsLoading(false)
+                return
+            }
+            
+            try {
+                // ✅ Petición al backend para verificar el token y obtener datos
+                const response = await fetch(
+                    `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${idMedico}`,
+                    {
+                        method: "GET",
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                        },
+                    }
+                )
+
+                if (response.status === 401) {
+                    console.warn("❌ Token expirado o no autorizado (Verificación Backend)")
+                    localStorage.clear()
+                    sessionStorage.clear()
+                    router.replace("/authentication/login")
+                    return
+                }
+
+                if (!response.ok) {
+                    console.error("❌ Error al obtener el usuario:", response.status)
+                    throw new Error("Error en la respuesta del servidor.")
+                }
+
+                const dataUsuario = await response.json()
+                const usuario =
+                    dataUsuario?.usuarios?.[0] || dataUsuario?.usuario || dataUsuario
+
+                if (!usuario) {
+                    console.warn("⚠️ No se encontró información del usuario en la respuesta")
+                    return
+                }
+
+                if (usuario.rol && usuario.rol !== "medico") {
+                    alert("Acceso restringido: esta cuenta no es de médico.")
+                    localStorage.clear()
+                    sessionStorage.clear()
+                    router.replace("/authentication/login")
+                    return
+                }
+
+                // ✅ Guardamos info del doctor
+                setDoctorName(usuario.nombre || "Sin nombre")
+                const userId = usuario.idUsuario || usuario.id
+                setDoctorId(userId)
+
+                // ✅ Cargamos datos relacionados
+                await loadData(userId)
+
+            } catch (error) {
+                console.error("🚨 Error al inicializar datos:", error)
+            } finally {
+                setIsLoading(false) // Esto se ejecuta al final de la carga exitosa o fallida
+            }
+        }
+
+        // ✅ CORRECCIÓN: Ejecución inmediata sin setTimeout
+        initializeData()
+    }, [router])
+
+
+    // --- Lógica de Logout CORREGIDA ---
     const handleLogout = async () => {
         setIsLoggingOut(true)
         try {
+            // ✅ CORRECCIÓN: Limpiar ambos por seguridad, pero sessionStorage es el clave
             localStorage.clear()
             sessionStorage.clear()
+            
+            // Limpieza de cookies (opcional, si hay tokens en cookies)
             document.cookie.split(";").forEach((cookie) => {
                 const eqPos = cookie.indexOf("=")
                 const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie
@@ -212,7 +244,8 @@ export default function DoctorPage() {
     }
 
     const handleViewProfile = () => router.push("/users/profile")
-
+    
+    // ... (otras funciones handleInviteSuccess y handleAssignSuccess se mantienen igual)
     const handleInviteSuccess = () => {
         console.log("✅ Usuario invitado exitosamente")
         setRefreshKey((prev) => prev + 1)
@@ -225,6 +258,17 @@ export default function DoctorPage() {
         loadData(doctorId)
     }
 
+    // --- RENDER CONDICIONAL DE CARGA ---
+    if (isLoading) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-purple-50">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
+                <p className="mt-4 text-purple-700 font-medium">Cargando panel médico...</p>
+            </div>
+        )
+    }
+
+    // --- RENDERIZADO PRINCIPAL (Si isLoading es false) ---
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-100 via-white to-purple-50">
             <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/90 border-b border-purple-200 shadow-sm">
@@ -301,8 +345,8 @@ export default function DoctorPage() {
                                     <button
                                         onClick={() => setActiveView("patients")}
                                         className={`flex-1 px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${activeView === "patients"
-                                            ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
-                                            : "text-purple-600 hover:bg-purple-50"
+                                                ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
+                                                : "text-purple-600 hover:bg-purple-50"
                                             }`}
                                     >
                                         <Users className="w-5 h-5" />
@@ -312,8 +356,8 @@ export default function DoctorPage() {
                                     <button
                                         onClick={() => setActiveView("reports")}
                                         className={`flex-1 px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${activeView === "reports"
-                                            ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
-                                            : "text-purple-600 hover:bg-purple-50"
+                                                ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
+                                                : "text-purple-600 hover:bg-purple-50"
                                             }`}
                                     >
                                         <FileText className="w-5 h-5" />
