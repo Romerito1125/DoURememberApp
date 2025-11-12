@@ -6,7 +6,6 @@ import { Mail, Lock, AlertCircle, Loader2 } from "lucide-react"
 import Input from "@/app/components/input"
 import GoogleSignInButton from "@/app/components/auth/GoogleSignInButton"
 import GoogleOneTap from "@/app/components/auth/GoogleOneTap"
-import { authService } from "@/services/auth.service"
 import { createClient } from "@/utils/supabase/client"
 import Header from "@/app/components/header"
 
@@ -138,7 +137,7 @@ function LoginForm() {
     setIsLoading(true)
 
     try {
-      console.log('🔐 Enviando solicitud de login...')
+      console.log('Enviando solicitud de login...' + formData.email + ' ' + formData.password)
       const response = await fetch(`${API_URL}/api/usuarios-autenticacion/login`, {
         method: 'POST',
         headers: {
@@ -156,16 +155,15 @@ function LoginForm() {
       }
 
       const data = await response.json()
-      const { token, idUsuario } = data
+      const token = data.access_token
+      const idUsuario = data.user_id
 
       if (!token || !idUsuario) {
         throw new Error('La respuesta del servidor no contiene token o idUsuario')
       }
 
-      console.log('✅ Login exitoso, guardando token...')
       localStorage.setItem('authToken', token)
-
-      // Buscar el usuario por ID para obtener su rol
+      localStorage.setItem('userId', idUsuario)
       console.log('👤 Obteniendo información del usuario...')
       const userResponse = await fetch(
         `${API_URL}/api/usuarios-autenticacion/buscarUsuario/${idUsuario}`,

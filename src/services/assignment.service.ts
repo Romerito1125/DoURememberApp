@@ -4,7 +4,7 @@ export interface Usuario {
   idUsuario: string
   idCuidador?: string
   idPaciente?: string  
-  rol: string
+  rol?: string
   nombre: string
   correo: string
   edad?: number

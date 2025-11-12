@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { 
-  Upload, 
-  Image as ImageIcon, 
-  Calendar, 
-  FileText, 
+import {
+  Upload,
+  Image as ImageIcon,
+  Calendar,
+  FileText,
   LogOut,
   Users,
   CheckCircle,
@@ -16,18 +16,19 @@ import {
   PowerOff,
   User,
   Activity,
-  Camera,
   TrendingUp,
-  Award
+  // Eliminamos Camera y Award que no se usan
 } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
-import { createClient } from "@/utils/supabase/client"
-import { authService } from "@/services/auth.service"
-import UserAvatar from "@/components/UserAvatar"
+// Eliminamos: import { createClient } from "@/utils/supabase/client"
+// Eliminamos: import { authService } from "@/services/auth.service"
+import UserAvatar from "@/components/UserAvatar" // Asumo que esto sigue siendo útil
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+
 const API_URL = 'https://api.devcorebits.com/api'
 
+// Interfaces (Mantenemos las que son relevantes para Sesiones y Pacientes)
 interface Stats {
   totalImagenes: number
   totalSesiones: number
@@ -53,9 +54,29 @@ interface Patient {
   nombre: string
 }
 
+// Helper para formato de fecha (añadido para la vista de Sesiones)
+const formatDate = (dateString: string) => {
+  if (!dateString) return "Fecha Desconocida";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("es-ES", {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return "Fecha Inválida";
+  }
+}
+
+
 export default function CuidadorDashboard() {
   const router = useRouter()
-  const supabase = createClient()
+  // Eliminamos: const supabase = createClient()
+
+  // --- Estados ---
   const [activeSection, setActiveSection] = useState<"overview" | "images" | "sessions" | "responses">("overview")
   const [stats, setStats] = useState<Stats>({
     totalImagenes: 0,
@@ -71,80 +92,33 @@ export default function CuidadorDashboard() {
   const [userRole, setUserRole] = useState("")
   const [userId, setUserId] = useState("")
   const [error, setError] = useState("")
-  // ✅ Estado para cerrar sesión correctamente
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  // ----------------
 
-  // Función para recargar datos cuando vuelve a la página
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && selectedPatient) {
-        console.log('🔄 Página visible, recargando datos...')
-        refreshSessionsData()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [selectedPatient])
-
-  useEffect(() => {
-    loadDashboardData()
-  }, [])
-
-  // Función para refrescar solo las sesiones
-  const refreshSessionsData = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (session?.access_token && selectedPatient) {
-        await loadSessionsForPatient(selectedPatient, session.access_token)
-      }
-    } catch (error) {
-      console.error('Error al refrescar datos:', error)
-    }
-  }
-
-  // Función para obtener totales desde el backend
-  const loadSessionTotals = async (token: string) => {
-    try {
-      // Obtener sesiones completadas
-      const completadasResponse = await fetch(
-        `${API_URL}/descripciones-imagenes/totalSesionCompletadas?estado=completado`,
-        { headers: { "Authorization": `Bearer ${token}` } }
-      )
-      
-      if (completadasResponse.ok) {
-        const completadasData = await completadasResponse.json()
-        
-        setStats(prev => ({
-          ...prev,
-          sesionesCompletadas: completadasData.sesiones || 0
-        }))
-      }
-    } catch (error) {
-      console.error('Error al cargar totales:', error)
-    }
-  }
-
+  // Función de Carga de Datos (Tu nueva lógica)
   const loadDashboardData = async () => {
+    let token = ""
+    let currentUserId = ""
+
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError || !session) {
+      // 1. OBTENER TOKEN Y USER ID DESDE LOCALSTORAGE
+      token = localStorage.getItem("authToken") || ""
+      currentUserId = localStorage.getItem("userId") || ""
+
+      if (!token || !currentUserId) {
+        console.log("No token o userId en localStorage, redirigiendo a login.")
         router.push('/authentication/login')
         return
       }
 
-      setUserId(session.user.id)
+      setUserId(currentUserId)
 
+      // 2. OBTENER PERFIL DEL USUARIO (ROL)
       const userResponse = await fetch(
-        `${API_URL}/usuarios-autenticacion/buscarUsuario/${session.user.id}`,
+        `${API_URL}/usuarios-autenticacion/buscarUsuario/${currentUserId}`,
         {
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           }
         }
@@ -161,21 +135,15 @@ export default function CuidadorDashboard() {
         throw new Error('No se encontró el usuario')
       }
 
+      // 3. VERIFICACIÓN DE ROL
       if (usuario.rol !== 'cuidador') {
         alert(`No tienes permisos para acceder a este panel. Tu rol es: ${usuario.rol}`)
-        
+
         switch (usuario.rol) {
-          case 'medico':
-            router.push('/users/doctor')
-            break
-          case 'paciente':
-            router.push('/users/patient')
-            break
-          case 'administrador':
-            router.push('/users/admin')
-            break
-          default:
-            router.push('/')
+          case 'medico': router.push('/users/doctor'); break
+          case 'paciente': router.push('/users/patient'); break
+          case 'administrador': router.push('/users/admin'); break
+          default: router.push('/'); break
         }
         return
       }
@@ -183,77 +151,140 @@ export default function CuidadorDashboard() {
       setUserName(usuario.nombre || 'Cuidador')
       setUserRole(usuario.rol)
 
+      // 4. OBTENER IMÁGENES DEL CUIDADOR
       const imagenesResponse = await fetch(
-        `${API_URL}/descripciones-imagenes/listarImagenes/${session.user.id}?page=1&limit=100`,
+        `${API_URL}/descripciones-imagenes/listarImagenes/${currentUserId}?page=1&limit=100`,
         {
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           }
         }
       )
-      
+
+      let totalImagenes = 0
       if (imagenesResponse.ok) {
         const imagenesData = await imagenesResponse.json()
-        const totalImagenes = imagenesData.data?.length || 0
+        totalImagenes = imagenesData.data?.length || 0
+      }
 
-        const pacientesResponse = await fetch(
-          `${API_URL}/usuarios-autenticacion/pacienteCuidador/${session.user.id}`,
-          { headers: { "Authorization": `Bearer ${session.access_token}` } }
+      // 5. OBTENER PACIENTES ASIGNADOS AL CUIDADOR
+      const pacientesResponse = await fetch(
+        `${API_URL}/usuarios-autenticacion/pacienteCuidador/${currentUserId}`,
+        { headers: { "Authorization": `Bearer ${token}` } }
+      )
+
+      if (pacientesResponse.ok) {
+        const pacientesData = await pacientesResponse.json()
+
+        const pacientesCompletos = await Promise.all(
+          pacientesData.map(async (item: { idPaciente: string }) => {
+            const perfilResponse = await fetch(
+              `${API_URL}/usuarios-autenticacion/buscarUsuario/${item.idPaciente}`,
+              { headers: { "Authorization": `Bearer ${token}` } }
+            )
+
+            if (perfilResponse.ok) {
+              const perfilData = await perfilResponse.json()
+              if (perfilData.usuarios && perfilData.usuarios.length > 0) {
+                return perfilData.usuarios[0]
+              }
+            }
+            return null
+          })
         )
 
-        if (pacientesResponse.ok) {
-          const pacientesData = await pacientesResponse.json()
+        const pacientesValidos = pacientesCompletos.filter(p => p !== null)
+        setPatients(pacientesValidos)
 
-          const pacientesCompletos = await Promise.all(
-            pacientesData.map(async (item: { idPaciente: string }) => {
-              const perfilResponse = await fetch(
-                `${API_URL}/usuarios-autenticacion/buscarUsuario/${item.idPaciente}`,
-                { headers: { "Authorization": `Bearer ${session.access_token}` } }
-              )
-
-              if (perfilResponse.ok) {
-                const perfilData = await perfilResponse.json()
-                if (perfilData.usuarios && perfilData.usuarios.length > 0) {
-                  return perfilData.usuarios[0]
-                }
-              }
-              return null
-            })
-          )
-
-          const pacientesValidos = pacientesCompletos.filter(p => p !== null)
-          setPatients(pacientesValidos)
-
-          if (pacientesValidos.length > 0) {
-            setSelectedPatient(pacientesValidos[0].idUsuario)
-            await loadSessionsForPatient(pacientesValidos[0].idUsuario, session.access_token)
-          }
+        if (pacientesValidos.length > 0) {
+          const defaultPatientId = pacientesValidos[0].idUsuario
+          setSelectedPatient(defaultPatientId)
+          // 6. CARGAR SESIONES DEL PRIMER PACIENTE
+          await loadSessionsForPatient(defaultPatientId, token)
         }
-
-        setStats(prev => ({
-          ...prev,
-          totalImagenes
-        }))
       }
-      
+
+      setStats(prev => ({
+        ...prev,
+        totalImagenes // Solo actualizamos totalImagenes aquí
+      }))
+
     } catch (error) {
       console.error('Error al cargar datos:', error)
       alert('Error al cargar los datos del panel. Por favor intenta nuevamente.')
+      // Limpiar y forzar la redirección si falla la carga.
+      localStorage.clear()
+      sessionStorage.clear()
       router.push('/authentication/login')
     } finally {
       setIsLoading(false)
     }
   }
 
+  // Se ejecuta al montar el componente
+  useEffect(() => {
+    loadDashboardData()
+  }, [])
+
+
+  // Función para refrescar solo las sesiones (Usa el token del localStorage)
+  const refreshSessionsData = async () => {
+    const token = localStorage.getItem("authToken")
+
+    if (token && selectedPatient) {
+      console.log('🔄 Página visible, recargando datos...')
+      await loadSessionsForPatient(selectedPatient, token)
+    }
+  }
+
+  // Función de visibilidad
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && selectedPatient) {
+        refreshSessionsData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [selectedPatient])
+
+
+  // Función para obtener totales desde el backend (Se mantiene aunque se puede eliminar, ver nota abajo)
+  const loadSessionTotals = async (token: string) => {
+    try {
+      // Obtener sesiones completadas
+      const completadasResponse = await fetch(
+        `${API_URL}/descripciones-imagenes/totalSesionCompletadas?estado=completado`,
+        { headers: { "Authorization": `Bearer ${token}` } }
+      )
+
+      if (completadasResponse.ok) {
+        const completadasData = await completadasResponse.json()
+
+        setStats(prev => ({
+          ...prev,
+          sesionesCompletadas: completadasData.sesiones || 0
+        }))
+      }
+    } catch (error) {
+      console.error('Error al cargar totales:', error)
+    }
+  }
+
+  // Función para cargar sesiones de un paciente específico (Usa el token proporcionado)
   const loadSessionsForPatient = async (idPaciente: string, token: string) => {
     try {
       console.log('📊 Cargando sesiones para paciente:', idPaciente)
-      
+
       const allSessionsResponse = await fetch(
         `${API_URL}/descripciones-imagenes/listarSesiones?idPaciente=${idPaciente}&page=1&limit=100`,
-        { 
-          headers: { 
+        {
+          headers: {
             "Authorization": `Bearer ${token}`
           }
         }
@@ -266,26 +297,17 @@ export default function CuidadorDashboard() {
 
       const allSessionsData = await allSessionsResponse.json()
       const todasSesiones = allSessionsData.data || []
-      
-      console.log('📋 Sesiones obtenidas:', todasSesiones.length)
-      console.log('📦 Datos completos:', JSON.stringify(todasSesiones, null, 2))
-      
+
       setSesiones(todasSesiones)
 
-      // USAR EL CAMPO estado DEL BACKEND
-      const completadas = todasSesiones.filter((s: Session) => 
+      // Calcular estadísticas locales (opcionalmente puedes usar la API si es más precisa)
+      const completadas = todasSesiones.filter((s: Session) =>
         s.estado === 'completado'
       ).length
 
-      const pendientes = todasSesiones.filter((s: Session) => 
+      const pendientes = todasSesiones.filter((s: Session) =>
         s.estado === 'pendiente' || s.estado === 'en_curso'
       ).length
-
-      console.log('📈 Estadísticas desde backend:', {
-        total: todasSesiones.length,
-        completadas,
-        pendientes
-      })
 
       setStats(prev => ({
         ...prev,
@@ -294,8 +316,8 @@ export default function CuidadorDashboard() {
         sesionesPendientes: pendientes
       }))
 
-      // Opcional: Cargar totales del endpoint específico
-      await loadSessionTotals(token)
+      // Nota: Si la lógica de arriba es precisa, puedes comentar o eliminar la siguiente línea:
+      // await loadSessionTotals(token) 
 
     } catch (error) {
       console.error('Error al cargar sesiones:', error)
@@ -306,10 +328,10 @@ export default function CuidadorDashboard() {
     setSelectedPatient(idPaciente)
     setIsLoading(true)
 
-    const { data: { session } } = await supabase.auth.getSession()
+    const token = localStorage.getItem("authToken")
 
-    if (session?.access_token) {
-      await loadSessionsForPatient(idPaciente, session.access_token)
+    if (token) {
+      await loadSessionsForPatient(idPaciente, token)
     }
 
     setIsLoading(false)
@@ -317,10 +339,11 @@ export default function CuidadorDashboard() {
 
   const handleToggleActivation = async (sesion: Session) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const token = localStorage.getItem("authToken")
 
-      if (!session?.access_token) {
-        alert('Sesión no válida')
+      if (!token) {
+        alert('Sesión no válida o expirada. Por favor, vuelve a iniciar sesión.')
+        router.push('/authentication/login')
         return
       }
 
@@ -332,7 +355,7 @@ export default function CuidadorDashboard() {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
+            'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
             activacion: nuevoEstado
@@ -345,7 +368,7 @@ export default function CuidadorDashboard() {
       }
 
       // Recargar sesiones después de actualizar
-      await loadSessionsForPatient(selectedPatient, session.access_token)
+      await loadSessionsForPatient(selectedPatient, token)
 
       alert(nuevoEstado ? 'Sesión activada exitosamente' : 'Sesión desactivada')
 
@@ -355,17 +378,17 @@ export default function CuidadorDashboard() {
     }
   }
 
-  // ✅ FUNCIÓN DE LOGOUT CORREGIDA (Del documento 9)
+  // ✅ FUNCIÓN DE LOGOUT CORREGIDA (Tu implementación que borra localStorage)
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    
+
     try {
-      await authService.logout()
+      // Eliminamos el llamado a authService.logout() y usamos solo el borrado de storage
       localStorage.clear()
       sessionStorage.clear()
       window.location.href = '/authentication/login'
     } catch (error) {
-      console.error('Error al cerrar sesión:', error)
+      console.error('Error al cerrar sesión (aunque ya se limpió el storage):', error)
       localStorage.clear()
       sessionStorage.clear()
       window.location.href = '/authentication/login'
@@ -418,64 +441,64 @@ export default function CuidadorDashboard() {
         <div className="space-y-8">
           {/* Card principal del cuidador con gradiente mejorado */}
           <Card className="bg-gradient-to-r from-purple-700 via-purple-800 to-violet-900 border-0 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top">
-      <div className="p-6 sm:p-10">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 lg:gap-8">
-          <div className="flex items-center gap-5">
-            <div className="relative flex-shrink-0">
-              {/* Avatar del cuidador */}
-              <div className="w-20 h-20 rounded-2xl bg-white/30 backdrop-blur-sm flex items-center justify-center border-2 border-white/60 shadow-lg ring-4 ring-white/25">
-                {/* Si usas la letra inicial del nombre como placeholder */}
-                
-                {/* O puedes usar un ícono específico para cuidador */}
-                <User className="w-10 h-10 text-white absolute" />
+            <div className="p-6 sm:p-10">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 lg:gap-8">
+                <div className="flex items-center gap-5">
+                  <div className="relative flex-shrink-0">
+                    {/* Avatar del cuidador */}
+                    <div className="w-20 h-20 rounded-2xl bg-white/30 backdrop-blur-sm flex items-center justify-center border-2 border-white/60 shadow-lg ring-4 ring-white/25">
+                      {/* Si usas la letra inicial del nombre como placeholder */}
+
+                      {/* O puedes usar un ícono específico para cuidador */}
+                      <User className="w-10 h-10 text-white absolute" />
+                    </div>
+
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-400 rounded-full border-4 border-white shadow-md animate-pulse"></div>
+                  </div>
+
+                  <div>
+                    <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-tight">
+                      Bienvenido, {userName}
+                    </h1>
+                    <p className="text-white/90 text-base font-medium">
+                      Panel de gestión del cuidador
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Botón Mi Perfil */}
+                  <Button
+                    onClick={handleViewProfile}
+                    className="bg-white/20 hover:bg-white/30 text-white border-2 border-white/40 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
+                  >
+                    <User className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Mi Perfil</span>
+                  </Button>
+
+                  {/* Botón Cerrar Sesión */}
+                  <Button
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    variant="outline"
+                    className="bg-white/15 border-2 border-white/50 text-white hover:bg-red-500 hover:border-red-500 backdrop-blur-sm transition-all duration-300 font-semibold disabled:opacity-50"
+                  >
+                    {isLoggingOut ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin sm:mr-2" />
+                        <span className="hidden sm:inline">Cerrando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogOut className="w-4 h-4 sm:mr-2" />
+                        <span className="hidden sm:inline">Cerrar Sesión</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-400 rounded-full border-4 border-white shadow-md animate-pulse"></div>
             </div>
-
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-tight">
-                Bienvenido, {userName}
-              </h1>
-              <p className="text-white/90 text-base font-medium">
-                Panel de gestión del cuidador
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Botón Mi Perfil */}
-            <Button
-              onClick={handleViewProfile}
-              className="bg-white/20 hover:bg-white/30 text-white border-2 border-white/40 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
-            >
-              <User className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Mi Perfil</span>
-            </Button>
-
-            {/* Botón Cerrar Sesión */}
-            <Button
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              variant="outline"
-              className="bg-white/15 border-2 border-white/50 text-white hover:bg-red-500 hover:border-red-500 backdrop-blur-sm transition-all duration-300 font-semibold disabled:opacity-50"
-            >
-              {isLoggingOut ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin sm:mr-2" />
-                  <span className="hidden sm:inline">Cerrando...</span>
-                </>
-              ) : (
-                <>
-                  <LogOut className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Cerrar Sesión</span>
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Card>
+          </Card>
 
           {/* Navegación con tabs mejorados */}
           <Card className="p-2 bg-white shadow-sm border border-slate-200 rounded-2xl animate-in fade-in slide-in-from-bottom" style={{ animationDelay: "0.1s" }}>
@@ -483,11 +506,10 @@ export default function CuidadorDashboard() {
               <button
                 type="button"
                 onClick={() => setActiveSection("overview")}
-                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${
-                  activeSection === "overview" 
-                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg" 
+                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${activeSection === "overview"
+                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
                     : "text-purple-600 hover:bg-purple-50 hover:text-purple-700"
-                }`}
+                  }`}
               >
                 <Users className="w-5 h-5" />
                 Vista General
@@ -496,11 +518,10 @@ export default function CuidadorDashboard() {
               <button
                 type="button"
                 onClick={() => setActiveSection("images")}
-                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${
-                  activeSection === "images" 
-                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg" 
+                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${activeSection === "images"
+                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
                     : "text-purple-600 hover:bg-purple-50 hover:text-purple-700"
-                }`}
+                  }`}
               >
                 <ImageIcon className="w-5 h-5" />
                 Gestionar Imágenes
@@ -509,11 +530,10 @@ export default function CuidadorDashboard() {
               <button
                 type="button"
                 onClick={() => setActiveSection("sessions")}
-                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${
-                  activeSection === "sessions" 
-                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg" 
+                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${activeSection === "sessions"
+                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
                     : "text-purple-600 hover:bg-purple-50 hover:text-purple-700"
-                }`}
+                  }`}
               >
                 <Calendar className="w-5 h-5" />
                 Sesiones
@@ -522,11 +542,10 @@ export default function CuidadorDashboard() {
               <button
                 type="button"
                 onClick={() => setActiveSection("responses")}
-                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${
-                  activeSection === "responses" 
-                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg" 
+                className={`flex-1 min-w-fit px-6 py-4 rounded-xl font-bold transition-all duration-300 flex items-center justify-center gap-2.5 ${activeSection === "responses"
+                    ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
                     : "text-purple-600 hover:bg-purple-50 hover:text-purple-700"
-                }`}
+                  }`}
               >
                 <FileText className="w-5 h-5" />
                 Respuestas
@@ -549,7 +568,7 @@ export default function CuidadorDashboard() {
                   <p className="text-purple-100 text-sm font-semibold">Imágenes Subidas</p>
                 </Card>
 
-                <Card 
+                <Card
                   onClick={() => setActiveSection("sessions")}
                   className="bg-gradient-to-br from-blue-500 to-blue-600 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 p-6 cursor-pointer"
                 >
@@ -562,7 +581,7 @@ export default function CuidadorDashboard() {
                   <p className="text-blue-100 text-sm font-semibold">Sesiones Creadas</p>
                 </Card>
 
-                <Card 
+                <Card
                   onClick={() => setActiveSection("sessions")}
                   className="bg-gradient-to-br from-green-500 to-green-600 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 p-6 cursor-pointer"
                 >
@@ -575,7 +594,7 @@ export default function CuidadorDashboard() {
                   <p className="text-green-100 text-sm font-semibold">Sesiones Completadas</p>
                 </Card>
 
-                <Card 
+                <Card
                   onClick={() => setActiveSection("sessions")}
                   className="bg-gradient-to-br from-amber-500 to-amber-600 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 p-6 cursor-pointer"
                 >
@@ -670,8 +689,8 @@ export default function CuidadorDashboard() {
                     className="group p-8 bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl hover:from-purple-100 hover:to-purple-200 transition-all duration-300 border-2 border-purple-200 hover:border-purple-300 text-left hover:shadow-xl"
                   >
                     <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-purple-700 rounded-2xl flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300">
-                      <ImageIcon className="w-8 h-8 text-white"/>
-                      </div>
+                      <ImageIcon className="w-8 h-8 text-white" />
+                    </div>
                     <h3 className="font-bold text-slate-900 mb-2 text-lg">Ver Todas las Imágenes</h3>
                     <p className="text-sm text-slate-600">Accede a la galería completa de fotografías</p>
                   </button>
@@ -696,7 +715,7 @@ export default function CuidadorDashboard() {
                     <div>
                       <p className="text-blue-900 font-semibold mb-1">💡 Consejo Importante</p>
                       <p className="text-blue-800 text-sm leading-relaxed">
-                        Las imágenes que subas estarán disponibles para crear sesiones 
+                        Las imágenes que subas estarán disponibles para crear sesiones
                         de evaluación. Asegúrate de agregar descripciones detalladas para obtener mejores resultados.
                       </p>
                     </div>
@@ -804,11 +823,10 @@ export default function CuidadorDashboard() {
                       >
                         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-6">
                           <div className="flex items-start gap-4">
-                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
-                              estaCompletada 
-                                ? 'bg-gradient-to-br from-green-500 to-green-600' 
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${estaCompletada
+                                ? 'bg-gradient-to-br from-green-500 to-green-600'
                                 : 'bg-gradient-to-br from-blue-500 to-indigo-600'
-                            }`}>
+                              }`}>
                               {estaCompletada ? (
                                 <CheckCircle className="w-7 h-7 text-white" />
                               ) : (
@@ -835,33 +853,31 @@ export default function CuidadorDashboard() {
                           <div className="flex items-center gap-4">
                             <div className="text-center">
                               <span
-                                className={`px-5 py-2.5 rounded-xl text-sm font-bold shadow-md ${
-                                  estaCompletada
+                                className={`px-5 py-2.5 rounded-xl text-sm font-bold shadow-md ${estaCompletada
                                     ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                                     : sesion.activacion
-                                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
-                                    : 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
-                                }`}
+                                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                                      : 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
+                                  }`}
                               >
                                 {estaCompletada ? 'Completada' : sesion.activacion ? 'Activa' : 'Inactiva'}
                               </span>
                               <p className="text-xs text-slate-500 mt-2 font-medium">
-                                {estaCompletada 
+                                {estaCompletada
                                   ? 'Sesión finalizada'
                                   : sesion.activacion
-                                  ? 'El paciente puede verla'
-                                  : 'Oculta para el paciente'}
+                                    ? 'El paciente puede verla'
+                                    : 'Oculta para el paciente'}
                               </p>
                             </div>
 
                             {!estaCompletada && (
                               <Button
                                 onClick={() => handleToggleActivation(sesion)}
-                                className={`p-4 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl ${
-                                  sesion.activacion
+                                className={`p-4 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl ${sesion.activacion
                                     ? 'bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white'
                                     : 'bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white'
-                                }`}
+                                  }`}
                                 title={sesion.activacion ? 'Desactivar sesión' : 'Activar sesión'}
                               >
                                 {sesion.activacion ? (
@@ -876,11 +892,10 @@ export default function CuidadorDashboard() {
 
                         <div className="bg-slate-100 rounded-full h-3 mb-6 overflow-hidden shadow-inner">
                           <div
-                            className={`h-3 rounded-full transition-all duration-500 ${
-                              estaCompletada 
-                                ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                            className={`h-3 rounded-full transition-all duration-500 ${estaCompletada
+                                ? 'bg-gradient-to-r from-green-500 to-green-600'
                                 : 'bg-gradient-to-r from-blue-500 to-indigo-600'
-                            }`}
+                              }`}
                             style={{ width: `${progreso}%` }}
                           />
                         </div>
@@ -958,11 +973,10 @@ export default function CuidadorDashboard() {
                         >
                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                             <div className="flex items-center gap-3">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md ${
-                                estaCompletada 
-                                  ? 'bg-gradient-to-br from-green-500 to-green-600' 
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md ${estaCompletada
+                                  ? 'bg-gradient-to-br from-green-500 to-green-600'
                                   : 'bg-gradient-to-br from-amber-500 to-amber-600'
-                              }`}>
+                                }`}>
                                 {estaCompletada ? (
                                   <CheckCircle className="w-6 h-6 text-white" />
                                 ) : (
@@ -979,11 +993,10 @@ export default function CuidadorDashboard() {
                                 </p>
                               </div>
                             </div>
-                            <span className={`px-4 py-2 rounded-xl text-xs font-bold shadow-md ${
-                              estaCompletada 
-                                ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                            <span className={`px-4 py-2 rounded-xl text-xs font-bold shadow-md ${estaCompletada
+                                ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                                 : 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
-                            }`}>
+                              }`}>
                               {estaCompletada ? 'Completada' : 'Pendiente'}
                             </span>
                           </div>
@@ -991,11 +1004,10 @@ export default function CuidadorDashboard() {
                           <Button
                             onClick={() => handleViewResponses(sesion.idSesion)}
                             disabled={!estaCompletada}
-                            className={`w-full rounded-xl transition-all duration-300 font-bold py-4 shadow-md ${
-                              estaCompletada
+                            className={`w-full rounded-xl transition-all duration-300 font-bold py-4 shadow-md ${estaCompletada
                                 ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-700 hover:to-purple-800 hover:shadow-lg'
                                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                            }`}
+                              }`}
                           >
                             <FileText className="w-5 h-5 mr-2" />
                             {estaCompletada ? 'Ver Respuestas Completas' : 'Esperando respuestas del paciente'}

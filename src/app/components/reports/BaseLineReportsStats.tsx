@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { FileText, TrendingUp, Users, Activity } from "lucide-react"
-import { reportsService } from "@/services/reports.service"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.devcorebits.com/api"
 
 export default function BaselineReportsStats() {
   const [stats, setStats] = useState({
@@ -20,29 +21,91 @@ export default function BaselineReportsStats() {
   const loadStats = async () => {
     setIsLoading(true)
     try {
-      const reports = await reportsService.getAllPatientsWithReports()
-      
-      const totalReports = reports.length
-      const totalSessions = reports.reduce((sum, r) => sum + r.summary.count, 0)
-      
-      const improvements = reports
-        .filter(r => r.summary.lastSessionTotal > r.summary.firstSessionTotal)
-        .map(r => r.summary.lastSessionTotal - r.summary.firstSessionTotal)
-      
-      const avgImprovement = improvements.length > 0
-        ? improvements.reduce((sum, imp) => sum + imp, 0) / improvements.length
-        : 0
-      
+      const token = localStorage.getItem("authToken")
+      if (!token) throw new Error("Token no encontrado. Redirigir al login.")
+
+      // Obtener todos los pacientes
+      const pacientesRes = await fetch(`${API_URL}/api/usuarios-autenticacion/buscarUsuarios`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!pacientesRes.ok) {
+        const txt = await pacientesRes.text()
+        console.error("❌ Error al obtener pacientes:", txt)
+        throw new Error("Error al obtener lista de usuarios")
+      }
+
+      const dataPacientes = await pacientesRes.json()
+      const pacientes = dataPacientes.usuarios?.filter((u: any) => u.rol === "paciente") || []
+
+      if (pacientes.length === 0) {
+        console.warn("⚠️ No hay pacientes registrados")
+        setStats({ totalReports: 0, totalSessions: 0, avgImprovement: 0, patientsWithProgress: 0 })
+        return
+      }
+
+      // Traer sesiones para cada paciente
+      const reportes = await Promise.all(
+        pacientes.map(async (paciente: any) => {
+          try {
+            const sesionesRes = await fetch(
+              `${API_URL}/descripciones-imagenes/api/listarSesionesGt?page=1&limit=4&idPaciente=${paciente.idUsuario}`,
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+              }
+            )
+
+            if (!sesionesRes.ok) return null
+
+            const dataSesiones = await sesionesRes.json()
+            const sesiones = Array.isArray(dataSesiones.data) ? dataSesiones.data : []
+            if (sesiones.length === 0) return null
+
+            const first = sesiones[0]
+            const last = sesiones[sesiones.length - 1]
+            const improvement = (last.sessionTotal || 0) - (first.sessionTotal || 0)
+
+            return {
+              count: sesiones.length,
+              firstSessionTotal: first.sessionTotal || 0,
+              lastSessionTotal: last.sessionTotal || 0,
+              improvement,
+            }
+          } catch (err) {
+            console.error(`Error procesando paciente ${paciente.nombre}:`, err)
+            return null
+          }
+        })
+      )
+
+      const validReports = reportes.filter((r) => r !== null)
+
+      const totalReports = validReports.length
+      const totalSessions = validReports.reduce((sum, r: any) => sum + (r?.count || 0), 0)
+      const improvements = validReports
+        .filter((r: any) => r.improvement > 0)
+        .map((r: any) => r.improvement)
+
+      const avgImprovement =
+        improvements.length > 0 ? improvements.reduce((sum, imp) => sum + imp, 0) / improvements.length : 0
+
       const patientsWithProgress = improvements.length
 
       setStats({
         totalReports,
         totalSessions,
-        avgImprovement: Number(reportsService.toPercentage(avgImprovement)),
+        avgImprovement: Math.round(avgImprovement * 100),
         patientsWithProgress,
       })
     } catch (error) {
       console.error("Error al cargar estadísticas:", error)
+      setStats({ totalReports: 0, totalSessions: 0, avgImprovement: 0, patientsWithProgress: 0 })
     } finally {
       setIsLoading(false)
     }
@@ -97,7 +160,7 @@ export default function BaselineReportsStats() {
   return (
     <div className="bg-white rounded-3xl shadow-sm p-6 space-y-4">
       <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas de Reportes</h2>
-      
+
       {statItems.map((stat, index) => {
         const Icon = stat.icon
         return (

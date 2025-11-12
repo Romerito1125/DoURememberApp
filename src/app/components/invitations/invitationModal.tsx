@@ -1,12 +1,9 @@
 "use client"
 import { useState } from "react"
 import { X, User, Mail, AlertCircle, UserPlus, CheckCircle } from "lucide-react"
-import { apiService } from "@/services/api";
-import { authService } from "@/services/auth.service";
 
-// =============================================
-// TIPOS
-// =============================================
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.devcorebits.com"
+
 interface InviteUserModalProps {
   isOpen: boolean
   onClose: () => void
@@ -15,50 +12,43 @@ interface InviteUserModalProps {
 interface FormData {
   nombreCompleto: string
   email: string
-  rol: 'paciente' | 'cuidador'
+  rol: "paciente" | "cuidador"
 }
 
-// =============================================
-// COMPONENTE PRINCIPAL
-// =============================================
-export default function InviteUserModal({ 
-  isOpen, 
-  onClose, 
-  onSuccess 
+export default function InviteUserModal({
+  isOpen,
+  onClose,
+  onSuccess,
 }: InviteUserModalProps) {
   const [formData, setFormData] = useState<FormData>({
     nombreCompleto: "",
     email: "",
-    rol: "paciente"
+    rol: "paciente",
   })
-  
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-  
-  // =============================================
-  // HANDLERS
-  // =============================================
-  const handleClose = () => {
-    if (!isSubmitting && !isSuccess) {
-      setFormData({ nombreCompleto: "", email: "", rol: "paciente" })
-      setError("")
-      onClose()
-    }
+
+  // =============================
+  // Obtener token y userId local
+  // =============================
+  const getAccessToken = () => {
+    if (typeof window === "undefined") return null
+    return localStorage.getItem("access_token") || sessionStorage.getItem("access_token")
   }
 
-  const resetAndClose = () => {
-    setFormData({ nombreCompleto: "", email: "", rol: "paciente" })
-    setError("")
-    setIsSuccess(false)
-    onClose()
+  const getCurrentUserId = () => {
+    if (typeof window === "undefined") return null
+    return localStorage.getItem("user_id") || sessionStorage.getItem("user_id")
   }
-  
+
+  // =============================
+  // Enviar invitación
+  // =============================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
-    
-    // Validaciones
+
     if (!formData.nombreCompleto.trim()) {
       setError("El nombre completo es requerido")
       return
@@ -71,58 +61,72 @@ export default function InviteUserModal({
       setError("Correo electrónico inválido")
       return
     }
-    
-    setIsSubmitting(true)
-    
-    try {
-      console.log('📧 Enviando invitación...')
-      
-      // Obtener el ID del médico logueado
-      const medicoId = await authService.getCurrentUserId();
-      console.log('ID del médico que invita:', medicoId);
 
-      // Payload con IdMedico si se invita a un paciente
-      const invitacionData: any = {
+    setIsSubmitting(true)
+
+    try {
+      const token = getAccessToken()
+      const medicoId = getCurrentUserId()
+
+      const payload: any = {
         nombreCompleto: formData.nombreCompleto,
         email: formData.email,
-        rol: formData.rol
+        rol: formData.rol,
       }
-      
-      // Solo incluir idMedico en caso de que sea paciente
-      if (formData.rol === 'paciente' && medicoId) {
-        invitacionData.idMedico = medicoId
-        console.log("Incluyendo idMedico en la invitación:", medicoId);
-      }
-      console.log('Datos de invitación:', invitacionData);
 
-      await apiService.invitarUsuario(invitacionData);
-      console.log('✅ Invitación enviada exitosamente')
-      
-      // Mostrar mensaje de éxito
+      if (formData.rol === "paciente" && medicoId) {
+        payload.idMedico = medicoId
+      }
+
+      console.log("📤 Enviando invitación con payload:", payload)
+
+      const response = await fetch(`${API_URL}/api/usuarios-autenticacion/crearInvitacion`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.message || "Error al enviar invitación")
+      }
+
+      console.log("✅ Invitación enviada correctamente")
       setIsSuccess(true)
-      
-      // Esperar 2 segundos antes de cerrar
       setTimeout(() => {
         onSuccess()
         resetAndClose()
       }, 2000)
-      
-    } catch (error: any) {
-      console.error('❌ Error al enviar invitación:', error)
-      setError(error.message || "Error al enviar la invitación")
+    } catch (err: any) {
+      console.error("❌ Error al enviar invitación:", err)
+      setError(err.message || "Error al enviar invitación")
     } finally {
       setIsSubmitting(false)
     }
   }
-  
-  // =============================================
-  // NO RENDERIZAR SI NO ESTÁ ABIERTO
-  // =============================================
+
+  const handleClose = () => {
+    if (!isSubmitting && !isSuccess) {
+      resetAndClose()
+    }
+  }
+
+  const resetAndClose = () => {
+    setFormData({ nombreCompleto: "", email: "", rol: "paciente" })
+    setError("")
+    setIsSuccess(false)
+    onClose()
+  }
+
   if (!isOpen) return null
-  
-  // =============================================
-  // VISTA DE ÉXITO
-  // =============================================
+
+  // =============================
+  // Vista de éxito
+  // =============================
   if (isSuccess) {
     return (
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -138,11 +142,11 @@ export default function InviteUserModal({
               Se ha enviado la invitación a <strong>{formData.email}</strong> exitosamente.
             </p>
             <div className="mt-4 h-1 bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-purple-500 to-violet-500" 
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-violet-500"
                 style={{
-                  animation: 'progress 2s ease-in-out forwards',
-                  width: '0%'
+                  animation: "progress 2s ease-in-out forwards",
+                  width: "0%",
                 }}
               ></div>
             </div>
@@ -150,17 +154,21 @@ export default function InviteUserModal({
         </div>
         <style jsx>{`
           @keyframes progress {
-            from { width: 0%; }
-            to { width: 100%; }
+            from {
+              width: 0%;
+            }
+            to {
+              width: 100%;
+            }
           }
         `}</style>
       </div>
     )
   }
-  
-  // =============================================
-  // RENDERIZADO PRINCIPAL
-  // =============================================
+
+  // =============================
+  // Formulario principal
+  // =============================
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
@@ -171,12 +179,8 @@ export default function InviteUserModal({
               <UserPlus className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">
-                Invitar Usuario
-              </h2>
-              <p className="text-white/90 text-sm">
-                Enviar invitación al equipo
-              </p>
+              <h2 className="text-xl font-bold text-white">Invitar Usuario</h2>
+              <p className="text-white/90 text-sm">Enviar invitación al equipo</p>
             </div>
           </div>
           <button
@@ -189,7 +193,6 @@ export default function InviteUserModal({
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -197,7 +200,7 @@ export default function InviteUserModal({
             </div>
           )}
 
-          {/* Nombre Completo */}
+          {/* Nombre */}
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-2">
               <User className="w-4 h-4 inline mr-1" />
@@ -206,14 +209,16 @@ export default function InviteUserModal({
             <input
               type="text"
               value={formData.nombreCompleto}
-              onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, nombreCompleto: e.target.value })
+              }
               placeholder="Juan Pérez García"
               className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-lg focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all text-slate-800"
               disabled={isSubmitting}
             />
           </div>
 
-          {/* Correo Electrónico */}
+          {/* Email */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               <Mail className="w-4 h-4 inline mr-1" />
@@ -229,86 +234,63 @@ export default function InviteUserModal({
             />
           </div>
 
-          {/* Selección de Rol */}
+          {/* Rol */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Tipo de Usuario <span className="text-red-500">*</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, rol: 'paciente' })}
-                disabled={isSubmitting}
-                className={`p-4 border-2 rounded-lg transition-all disabled:opacity-50 ${
-                  formData.rol === 'paciente'
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-slate-200 hover:border-purple-300'
-                }`}
-              >
-                <div className="text-center">
-                  <div className={`w-10 h-10 mx-auto mb-2 rounded-full flex items-center justify-center ${
-                    formData.rol === 'paciente' ? 'bg-gradient-to-br from-purple-500 to-violet-500' : 'bg-slate-200'
-                  }`}>
-                    <User className={`w-5 h-5 ${
-                      formData.rol === 'paciente' ? 'text-white' : 'text-slate-600'
-                    }`} />
+              {["paciente", "cuidador"].map((rol) => (
+                <button
+                  key={rol}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, rol: rol as "paciente" | "cuidador" })}
+                  disabled={isSubmitting}
+                  className={`p-4 border-2 rounded-lg transition-all ${
+                    formData.rol === rol
+                      ? "border-purple-500 bg-purple-50"
+                      : "border-slate-200 hover:border-purple-300"
+                  }`}
+                >
+                  <div className="text-center">
+                    <div
+                      className={`w-10 h-10 mx-auto mb-2 rounded-full flex items-center justify-center ${
+                        formData.rol === rol
+                          ? "bg-gradient-to-br from-purple-500 to-violet-500"
+                          : "bg-slate-200"
+                      }`}
+                    >
+                      <User
+                        className={`w-5 h-5 ${
+                          formData.rol === rol ? "text-white" : "text-slate-600"
+                        }`}
+                      />
+                    </div>
+                    <div
+                      className={`font-semibold ${
+                        formData.rol === rol ? "text-purple-700" : "text-slate-700"
+                      }`}
+                    >
+                      {rol.charAt(0).toUpperCase() + rol.slice(1)}
+                    </div>
                   </div>
-                  <div className={`font-semibold ${
-                    formData.rol === 'paciente' ? 'text-purple-700' : 'text-slate-700'
-                  }`}>
-                    Paciente
-                  </div>
-                  <div className="text-xs text-slate-600 mt-1">
-                    Recibe atención
-                  </div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, rol: 'cuidador' })}
-                disabled={isSubmitting}
-                className={`p-4 border-2 rounded-lg transition-all disabled:opacity-50 ${
-                  formData.rol === 'cuidador'
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-slate-200 hover:border-purple-300'
-                }`}
-              >
-                <div className="text-center">
-                  <div className={`w-10 h-10 mx-auto mb-2 rounded-full flex items-center justify-center ${
-                    formData.rol === 'cuidador' ? 'bg-gradient-to-br from-purple-500 to-violet-500' : 'bg-slate-200'
-                  }`}>
-                    <User className={`w-5 h-5 ${
-                      formData.rol === 'cuidador' ? 'text-white' : 'text-slate-600'
-                    }`} />
-                  </div>
-                  <div className={`font-semibold ${
-                    formData.rol === 'cuidador' ? 'text-purple-700' : 'text-slate-700'
-                  }`}>
-                    Cuidador
-                  </div>
-                  <div className="text-xs text-slate-600 mt-1">
-                    Cuida pacientes
-                  </div>
-                </div>
-              </button>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Mensaje Informativo */}
+          {/* Info */}
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-start gap-2">
             <UserPlus className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
             <p className="text-purple-800 text-sm">
-              Se enviará un correo de invitación al{' '}
-              <strong>{formData.rol === 'paciente' ? 'paciente' : 'cuidador'}</strong>
-              {' '}con instrucciones para unirse al equipo.
+              Se enviará un correo de invitación al{" "}
+              <strong>{formData.rol}</strong> con instrucciones para unirse.
             </p>
           </div>
 
-          {/* Actions */}
+          {/* Botones */}
           <div className="flex gap-3 pt-4">
             <button
-              type="button"
               onClick={handleClose}
               disabled={isSubmitting}
               className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium disabled:opacity-50"
@@ -316,10 +298,9 @@ export default function InviteUserModal({
               Cancelar
             </button>
             <button
-              type="button"
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-violet-500 text-white rounded-lg hover:from-purple-600 hover:to-violet-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md"
+              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-violet-500 text-white rounded-lg hover:from-purple-600 hover:to-violet-600 transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
             >
               {isSubmitting ? (
                 <>

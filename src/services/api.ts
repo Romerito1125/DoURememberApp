@@ -217,9 +217,6 @@ class ApiService {
     try {
       console.log('📧 Enviando invitación...')
       
-      // 🔥 CAMBIO: await this.getAuthHeaders() porque es async
-      const headers = await this.getAuthHeaders()
-
       const payload: any = {
         nombreCompleto: data.nombreCompleto,
         email: data.email,
@@ -234,7 +231,6 @@ class ApiService {
         `${this.baseUrl}/api/usuarios-autenticacion/crearInvitacion`, 
         {
           method: 'POST',
-          headers,
           body: JSON.stringify(payload),
         }
       )
